@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       partes: limparLista(body.partes).filter((p) => (PARTES as string[]).includes(p)),
     };
     if (linha.partes.length === 0) return respostaErro(new Error("Informe ao menos uma parte"), 400);
+    if (linha.grades.length > 1) return respostaErro(new Error("Um item só pode ter uma grade"), 400);
 
     const supabase = getSupabaseServer();
     let itemId: number = body.id;

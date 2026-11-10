@@ -1231,41 +1231,13 @@ input[type="checkbox"] {
 /* ───────── tickets ───────── */
 
 .grade-ticket {
-  grid-template-columns: 1fr 2.2fr 1.2fr 1.2fr;
+  grid-template-columns: 1fr 2.4fr 1.3fr;
 }
 
-.quantidades {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-}
 
-.tamanhos {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 
-.tamanho {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 76px;
-}
 
-.tamanho span {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--tinta-2);
-  text-align: center;
-}
 
-.tamanho .entrada {
-  text-align: center;
-}
 
 .gerar-rodape {
   display: flex;
@@ -1298,4 +1270,34 @@ input[type="checkbox"] {
   body {
     background: #fff;
   }
+}
+
+/* ───────── tickets: quantidades por cor e tamanho ───────── */
+
+.cores-tamanhos {
+  margin-top: 18px;
+}
+
+.grade-quantidades td {
+  height: 52px;
+}
+
+.grade-quantidades td:first-child {
+  min-width: 150px;
+}
+
+.grade-quantidades .qtd {
+  width: 64px;
+  margin: 0 auto;
+  display: block;
+  text-align: center;
+}
+
+.cores-rodape {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
 }

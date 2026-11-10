@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Search, Trash2 } from "lucide-react";
+import { ChevronRight, Plus, Printer, Search, Trash2, X } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import {
@@ -18,6 +18,10 @@ import {
 } from "@/lib/producao";
 
 type OpcaoParte = "ambas" | Parte;
+type GrupoCor = { chave: number; cor: string; qtd: Record<string, string> };
+
+let proximaChave = 0;
+const novoGrupo = (cor: string): GrupoCor => ({ chave: ++proximaChave, cor, qtd: {} });
 
 const min = (m: number) => m.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
@@ -32,9 +36,8 @@ export default function TicketsPage() {
   // formulário de geração
   const [op, setOp] = useState("");
   const [itemId, setItemId] = useState("");
-  const [cor, setCor] = useState("");
   const [parte, setParte] = useState<OpcaoParte>("ambas");
-  const [quantidades, setQuantidades] = useState<Record<string, string>>({});
+  const [grupos, setGrupos] = useState<GrupoCor[]>([novoGrupo("")]);
   const [tamanhoLivre, setTamanhoLivre] = useState("");
   const [porPacote, setPorPacote] = useState("");
 
@@ -80,20 +83,27 @@ export default function TicketsPage() {
     .filter((o): o is Operacao => !!o && partesEscolhidas.includes(o.parte));
   const tempoPeca = sequencia.reduce((s, o) => s + o.tempo_minutos, 0);
 
-  const tamanhos = item?.tamanhos.length ? item.tamanhos : [];
-  const linhas = tamanhos.length
-    ? tamanhos.map((t) => ({ tamanho: t, quantidade: Number(quantidades[t]) || 0 }))
-    : [{ tamanho: tamanhoLivre, quantidade: Number(quantidades[""]) || 0 }];
-  const totalPecas = linhas.reduce((s, l) => s + l.quantidade, 0);
+  // Sem tamanhos cadastrados, a grade tem uma coluna só, com o tamanho digitado à mão
+  const tamanhos = item?.tamanhos.length ? item.tamanhos : [tamanhoLivre];
+  const linhasDo = (g: GrupoCor) => tamanhos.map((t) => ({ tamanho: t, quantidade: Number(g.qtd[t]) || 0 }));
+  const totalDo = (g: GrupoCor) => linhasDo(g).reduce((s, l) => s + l.quantidade, 0);
+  const totalPecas = grupos.reduce((s, g) => s + totalDo(g), 0);
   const pacote = Number(porPacote) || 0;
-  const qtdTickets = linhas.reduce((s, l) => s + (l.quantidade <= 0 ? 0 : pacote > 0 ? Math.ceil(l.quantidade / pacote) : 1), 0);
+  const qtdTickets = grupos
+    .flatMap(linhasDo)
+    .reduce((s, l) => s + (l.quantidade <= 0 ? 0 : pacote > 0 ? Math.ceil(l.quantidade / pacote) : 1), 0);
+  const semCor = grupos.some((g) => totalDo(g) > 0 && !g.cor.trim());
 
   function escolherItem(id: string) {
     setItemId(id);
     const novo = itens.find((i) => String(i.id) === id);
-    setCor(novo?.cores.length === 1 ? novo.cores[0] : "");
     setParte(novo && novo.partes.length === 1 ? novo.partes[0] : "ambas");
-    setQuantidades({});
+    // já deixa uma linha para cada cor do item; as que ficarem zeradas não geram ticket
+    setGrupos(novo?.cores.length ? novo.cores.map(novoGrupo) : [novoGrupo("")]);
+  }
+
+  function mudarGrupo(chave: number, mudanca: Partial<GrupoCor>) {
+    setGrupos((atual) => atual.map((g) => (g.chave === chave ? { ...g, ...mudanca } : g)));
   }
 
   async function gerar(e: React.FormEvent) {
@@ -105,12 +115,18 @@ export default function TicketsPage() {
     try {
       const r = await api<{ ids: number[] }>("/api/tickets", {
         method: "POST",
-        body: JSON.stringify({ op, item_id: item?.id, cor, partes: partesEscolhidas, pecas_por_pacote: pacote, linhas }),
+        body: JSON.stringify({
+          op,
+          item_id: item?.id,
+          partes: partesEscolhidas,
+          pecas_por_pacote: pacote,
+          grupos: grupos.map((g) => ({ cor: g.cor, linhas: linhasDo(g) })),
+        }),
       });
       const url = `/tickets/imprimir?ids=${r.ids.join(",")}`;
       if (aba) aba.location.href = url;
       else window.location.href = url;
-      setQuantidades({});
+      setGrupos((atual) => atual.map((g) => ({ ...g, qtd: {} })));
       setBuscaOp(op);
       await carregarTickets(op);
     } catch (e) {
@@ -174,7 +190,7 @@ export default function TicketsPage() {
   );
   idsVisiveis = tabela.visiveis.map((t) => t.id);
 
-  const podeGerar = !!item && !!op.trim() && totalPecas > 0 && sequencia.length > 0;
+  const podeGerar = !!item && !!op.trim() && totalPecas > 0 && sequencia.length > 0 && !semCor;
 
   return (
     <ProducaoLayout titulo="Tickets" subtitulo="Gere os tickets de uma OP. Cada operação vira um cupom destacável com código de barras.">
@@ -184,7 +200,9 @@ export default function TicketsPage() {
         <div className="bloco-cabecalho">
           <div>
             <h2>Gerar tickets</h2>
-            <p className="bloco-descricao">Sai um ticket por tamanho, ou vários se você dividir em pacotes.</p>
+            <p className="bloco-descricao">
+              Sai um ticket para cada cor e tamanho com quantidade, ou vários se você dividir em pacotes.
+            </p>
           </div>
         </div>
         <div className="campos grade-ticket">
@@ -204,15 +222,6 @@ export default function TicketsPage() {
             </select>
           </label>
           <label className="campo">
-            <span>Cor</span>
-            <input className="entrada" list="lista-cores" value={cor} onChange={(e) => setCor(e.target.value)} />
-            <datalist id="lista-cores">
-              {item?.cores.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          </label>
-          <label className="campo">
             <span>Parte</span>
             <select className="entrada" value={parte} onChange={(e) => setParte(e.target.value as OpcaoParte)} disabled={!item}>
               {partesItem.length !== 1 && <option value="ambas">Superior e inferior</option>}
@@ -226,55 +235,96 @@ export default function TicketsPage() {
         </div>
 
         {item && (
-          <div className="quantidades">
-            <div className="campo">
-              <span>Peças por tamanho</span>
-              <div className="tamanhos">
-                {tamanhos.length > 0 ? (
-                  tamanhos.map((t) => (
-                    <label key={t} className="tamanho">
-                      <span>{t}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        className="entrada num"
-                        value={quantidades[t] ?? ""}
-                        onChange={(e) => setQuantidades({ ...quantidades, [t]: e.target.value })}
-                      />
-                    </label>
-                  ))
-                ) : (
-                  <>
-                    <label className="tamanho" style={{ width: 110 }}>
-                      <span>Tamanho</span>
-                      <input className="entrada" value={tamanhoLivre} onChange={(e) => setTamanhoLivre(e.target.value)} />
-                    </label>
-                    <label className="tamanho" style={{ width: 110 }}>
-                      <span>Peças</span>
-                      <input
-                        type="number"
-                        min={0}
-                        className="entrada num"
-                        value={quantidades[""] ?? ""}
-                        onChange={(e) => setQuantidades({ "": e.target.value })}
-                      />
-                    </label>
-                  </>
-                )}
-              </div>
+          <div className="cores-tamanhos">
+            {!item.tamanhos.length && (
+              <label className="campo" style={{ width: 160, marginBottom: 12 }}>
+                <span>Tamanho</span>
+                <input className="entrada" value={tamanhoLivre} onChange={(e) => setTamanhoLivre(e.target.value)} />
+              </label>
+            )}
+            <div className="tabela-caixa">
+              <table className="tabela grade-quantidades">
+                <thead>
+                  <tr>
+                    <th>Cor</th>
+                    {tamanhos.map((t, i) => (
+                      <th key={i} className="direita" style={{ textAlign: "center" }}>
+                        {item.tamanhos.length ? t : "Peças"}
+                      </th>
+                    ))}
+                    <th className="direita">Total</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {grupos.map((g) => (
+                    <tr key={g.chave}>
+                      <td>
+                        <input
+                          className="entrada"
+                          list="lista-cores"
+                          placeholder="Nome da cor"
+                          aria-label="Cor"
+                          value={g.cor}
+                          onChange={(e) => mudarGrupo(g.chave, { cor: e.target.value })}
+                        />
+                      </td>
+                      {tamanhos.map((t, i) => (
+                        <td key={i}>
+                          <input
+                            type="number"
+                            min={0}
+                            className="entrada num qtd"
+                            aria-label={`${g.cor || "Cor"}, tamanho ${t}`}
+                            value={g.qtd[t] ?? ""}
+                            onChange={(e) => mudarGrupo(g.chave, { qtd: { ...g.qtd, [t]: e.target.value } })}
+                          />
+                        </td>
+                      ))}
+                      <td className="direita forte">{totalDo(g) || <span className="fraco">0</span>}</td>
+                      <td>
+                        <div className="acoes">
+                          <button
+                            type="button"
+                            className="botao botao-pequeno botao-icone botao-perigo"
+                            aria-label={`Tirar a cor ${g.cor}`}
+                            title="Tirar esta cor"
+                            disabled={grupos.length === 1}
+                            onClick={() => setGrupos((atual) => atual.filter((x) => x.chave !== g.chave))}
+                          >
+                            <X size={14} aria-hidden />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <datalist id="lista-cores">
+                {item.cores.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
-            <label className="campo" style={{ width: 180 }}>
-              <span>Peças por pacote</span>
-              <input
-                type="number"
-                min={0}
-                className="entrada num"
-                placeholder="Sem dividir"
-                value={porPacote}
-                onChange={(e) => setPorPacote(e.target.value)}
-              />
-              <small>Opcional</small>
-            </label>
+            <div className="cores-rodape">
+              <button type="button" className="botao botao-secundario botao-pequeno" onClick={() => setGrupos((a) => [...a, novoGrupo("")])}>
+                <Plus size={14} aria-hidden />
+                Adicionar cor
+              </button>
+              <label className="campo" style={{ width: 180 }}>
+                <span>Peças por pacote</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="entrada num"
+                  placeholder="Sem dividir"
+                  value={porPacote}
+                  onChange={(e) => setPorPacote(e.target.value)}
+                />
+                <small>Opcional</small>
+              </label>
+            </div>
+            {semCor && <Aviso tipo="alerta">Há quantidade numa linha sem cor. Escreva a cor ou zere a linha.</Aviso>}
           </div>
         )}
 
@@ -291,7 +341,9 @@ export default function TicketsPage() {
           </button>
           {item && (
             <span className="num fraco">
-              {sequencia.length} operações · {min(tempoPeca)} min por peça · {totalPecas} peças em {qtdTickets}{" "}
+              {sequencia.length} operações · {min(tempoPeca)} min por peça ·{" "}
+              {grupos.filter((g) => totalDo(g) > 0).length} {grupos.filter((g) => totalDo(g) > 0).length === 1 ? "cor" : "cores"} ·{" "}
+              {totalPecas} peças em {qtdTickets}{" "}
               {qtdTickets === 1 ? "ticket" : "tickets"} · {Math.round(tempoPeca * totalPecas).toLocaleString("pt-BR")} min de costura
             </span>
           )}

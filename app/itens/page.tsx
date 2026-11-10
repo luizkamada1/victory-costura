@@ -81,14 +81,10 @@ export default function ItensPage() {
     setForm((f) => f && { ...f, id: undefined, referencia: "" });
   }
 
-  function alternarGrade(grade: string) {
-    if (!form) return;
-    const marcada = form.grades.includes(grade);
-    const grades = marcada ? form.grades.filter((g) => g !== grade) : [...form.grades, grade];
-    let tamanhos = separar(form.tamanhos);
-    if (marcada) tamanhos = tamanhos.filter((t) => !GRADES[grade].includes(t));
-    else for (const t of GRADES[grade]) if (!tamanhos.includes(t)) tamanhos.push(t);
-    setForm({ ...form, grades, tamanhos: tamanhos.join(", ") });
+  // Um item tem uma grade só: escolher outra troca a grade e os tamanhos sugeridos
+  function escolherGrade(grade: string) {
+    if (!form || form.grades.length === 1 && form.grades[0] === grade) return;
+    setForm({ ...form, grades: [grade], tamanhos: GRADES[grade].join(", ") });
   }
 
   function alternarParte(parte: Parte) {
@@ -206,13 +202,24 @@ export default function ItensPage() {
           <div className="campos grade-2" style={{ marginTop: 14 }}>
             <div className="campo">
               <span>Grade</span>
-              <div className="fichas" role="group" aria-label="Grade">
-                {Object.keys(GRADES).map((g) => (
-                  <button key={g} type="button" className="ficha" aria-pressed={form.grades.includes(g)} onClick={() => alternarGrade(g)}>
-                    {form.grades.includes(g) && <Check size={14} aria-hidden />}
-                    {g}
-                  </button>
-                ))}
+              <div className="fichas" role="radiogroup" aria-label="Grade">
+                {Object.keys(GRADES).map((g) => {
+                  const escolhida = form.grades.length === 1 && form.grades[0] === g;
+                  return (
+                    <button
+                      key={g}
+                      type="button"
+                      role="radio"
+                      className="ficha"
+                      aria-checked={escolhida}
+                      aria-pressed={escolhida}
+                      onClick={() => escolherGrade(g)}
+                    >
+                      {escolhida && <Check size={14} aria-hidden />}
+                      {g}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="campo">
@@ -229,7 +236,7 @@ export default function ItensPage() {
             <label className="campo">
               <span>Tamanhos</span>
               <input className="entrada" placeholder="P, M, G, GG" value={form.tamanhos} onChange={(e) => setForm({ ...form, tamanhos: e.target.value })} />
-              <small>Separados por vírgula. Marcar uma grade preenche os tamanhos dela.</small>
+              <small>Separados por vírgula. Escolher a grade preenche os tamanhos dela.</small>
             </label>
             <label className="campo">
               <span>Cores</span>

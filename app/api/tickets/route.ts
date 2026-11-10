@@ -55,28 +55,36 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// body: { op, item_id, cor, partes: ["superior"...], pecas_por_pacote?, linhas: [{ tamanho, quantidade }] }
-// Gera um ticket por tamanho (ou vários, se informado o tamanho do pacote).
+// body: { op, item_id, partes: ["superior"...], pecas_por_pacote?,
+//         grupos: [{ cor, linhas: [{ tamanho, quantidade }] }] }
+// (ou, no formato antigo, um só grupo: { cor, linhas })
+// Gera um ticket por cor e tamanho (ou vários, se informado o tamanho do pacote).
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const op = String(body.op ?? "").trim();
-    const cor = String(body.cor ?? "").trim() || null;
     const partes = (Array.isArray(body.partes) ? body.partes : []).filter((p: string) =>
       (PARTES as string[]).includes(p)
     ) as Parte[];
     const porPacote = Math.max(0, Math.floor(Number(body.pecas_por_pacote) || 0));
-    const linhas = (Array.isArray(body.linhas) ? body.linhas : [])
-      .map((l: { tamanho?: string; quantidade?: number }) => ({
-        tamanho: String(l.tamanho ?? "").trim() || null,
-        quantidade: Math.floor(Number(l.quantidade) || 0),
-      }))
-      .filter((l: { quantidade: number }) => l.quantidade > 0);
+    type Linha = { cor: string | null; tamanho: string | null; quantidade: number };
+    const gruposBrutos: { cor?: string; linhas?: { tamanho?: string; quantidade?: number }[] }[] = Array.isArray(body.grupos)
+      ? body.grupos
+      : [{ cor: body.cor, linhas: body.linhas }];
+    const linhas: Linha[] = gruposBrutos.flatMap((g) =>
+      (Array.isArray(g.linhas) ? g.linhas : [])
+        .map((l) => ({
+          cor: String(g.cor ?? "").trim() || null,
+          tamanho: String(l.tamanho ?? "").trim() || null,
+          quantidade: Math.floor(Number(l.quantidade) || 0),
+        }))
+        .filter((l) => l.quantidade > 0)
+    );
 
     if (!op) return respostaErro(new Error("Informe a OP"), 400);
     if (!body.item_id) return respostaErro(new Error("Selecione a referência"), 400);
     if (partes.length === 0) return respostaErro(new Error("Selecione a parte"), 400);
-    if (linhas.length === 0) return respostaErro(new Error("Informe a quantidade de ao menos um tamanho"), 400);
+    if (linhas.length === 0) return respostaErro(new Error("Informe a quantidade de ao menos uma cor e tamanho"), 400);
 
     const supabase = getSupabaseServer();
     const { data: item, error: erroItem } = await supabase
@@ -102,11 +110,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Quebra cada tamanho em pacotes, se pedido
-    const pacotes: { tamanho: string | null; quantidade: number }[] = [];
+    const pacotes: Linha[] = [];
     for (const l of linhas) {
       if (porPacote > 0 && l.quantidade > porPacote) {
         for (let resto = l.quantidade; resto > 0; resto -= porPacote) {
-          pacotes.push({ tamanho: l.tamanho, quantidade: Math.min(porPacote, resto) });
+          pacotes.push({ ...l, quantidade: Math.min(porPacote, resto) });
         }
       } else {
         pacotes.push(l);
@@ -122,7 +130,7 @@ export async function POST(req: NextRequest) {
           item_id: item.id,
           referencia: item.referencia,
           nome_item: item.nome,
-          cor,
+          cor: p.cor,
           tamanho: p.tamanho,
           partes,
           quantidade: p.quantidade,
