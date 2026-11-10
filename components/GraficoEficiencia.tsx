@@ -33,8 +33,8 @@ export default function GraficoEficiencia({ pontos, carregando }: { pontos: Pont
     return (
       <div ref={caixa} className="grafico">
         <div className="vazio" style={{ height: ALTURA, display: "grid", placeContent: "center" }}>
-          <strong>Nenhum dia apurado ainda</strong>
-          Quando houver cupons apontados, a eficiência de cada dia aparece aqui.
+          <strong>Nenhum dia apurado neste período</strong>
+          Os dias aparecem aqui quando houver cupons apontados.
         </div>
       </div>
     );
@@ -51,6 +51,8 @@ export default function GraficoEficiencia({ pontos, carregando }: { pontos: Pont
   const y = (v: number) => M.topo + alturaUtil - (v / topo) * alturaUtil;
   const caminho = valores.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const ultimo = pontos.length - 1;
+  // cada data ocupa uns 46px; com mais dias do que cabe, mostra uma a cada N
+  const passoDatas = Math.max(1, Math.ceil((pontos.length * 46) / larguraUtil));
 
   function apontar(e: React.PointerEvent<SVGRectElement>) {
     const caixaSvg = (e.currentTarget.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
@@ -77,7 +79,7 @@ export default function GraficoEficiencia({ pontos, carregando }: { pontos: Pont
         width={largura}
         height={ALTURA}
         role="img"
-        aria-label={`Eficiência da equipe nos últimos ${pontos.length} dias apurados. Último dia: ${pct(valores[ultimo] / 100)}.`}
+        aria-label={`Eficiência da equipe em ${pontos.length} dias apurados do período. Último dia: ${pct(valores[ultimo] / 100)}.`}
         tabIndex={0}
         onKeyDown={teclado}
         onBlur={() => setAtivo(null)}
@@ -100,11 +102,13 @@ export default function GraficoEficiencia({ pontos, carregando }: { pontos: Pont
           meta
         </text>
 
-        {pontos.map((pt, i) => (
-          <text key={pt.data} x={x(i)} y={ALTURA - 8} className="grafico-eixo" textAnchor="middle">
-            {diaMes(pt.data)}
-          </text>
-        ))}
+        {pontos.map((pt, i) =>
+          (ultimo - i) % passoDatas === 0 ? (
+            <text key={pt.data} x={x(i)} y={ALTURA - 8} className="grafico-eixo" textAnchor="middle">
+              {diaMes(pt.data)}
+            </text>
+          ) : null
+        )}
 
         {ativo !== null && <line x1={x(ativo)} x2={x(ativo)} y1={M.topo} y2={M.topo + alturaUtil} className="grafico-mira" />}
 

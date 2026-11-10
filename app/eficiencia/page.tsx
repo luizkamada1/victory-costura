@@ -72,8 +72,6 @@ export default function EficienciaPage() {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
-  const [historico, setHistorico] = useState<Linha[]>([]);
-  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
 
   useEffect(() => {
     if (!inicio || !fim) return;
@@ -84,16 +82,6 @@ export default function EficienciaPage() {
       .catch((e) => setErro(mensagemErro(e)))
       .finally(() => setCarregando(false));
   }, [inicio, fim]);
-
-  // Os 10 últimos dias apurados (com produção) até o fim do período; busca 60 dias para trás para achá-los
-  useEffect(() => {
-    if (!fim) return;
-    setCarregandoHistorico(true);
-    api<{ costureiras: Linha[] }>(`/api/eficiencia?inicio=${somarDias(fim, -60)}&fim=${fim}`)
-      .then((r) => setHistorico(r.costureiras))
-      .catch((e) => setErro(mensagemErro(e)))
-      .finally(() => setCarregandoHistorico(false));
-  }, [fim]);
 
   const tabela = useTabela<Linha>(
     linhas,
@@ -120,11 +108,9 @@ export default function EficienciaPage() {
   const totalCupons = visiveis.reduce((s, l) => s + l.operacoes, 0);
   const efPeriodo = totalDisp > 0 ? totalProd / totalDisp : null;
 
-  // o gráfico considera as mesmas costureiras que estão visíveis na tabela (respeita os filtros)
-  const idsVisiveis = new Set(visiveis.map((l) => l.id));
+  // Gráfico: os dias apurados (com produção) do período, somando as costureiras visíveis na tabela
   const porDia = new Map<string, PontoEficiencia>();
-  for (const l of historico) {
-    if (!idsVisiveis.has(l.id)) continue;
+  for (const l of visiveis) {
     for (const d of l.dias) {
       const atual = porDia.get(d.data) ?? { data: d.data, produzido: 0, disponivel: 0 };
       atual.produzido += d.produzido;
@@ -132,10 +118,9 @@ export default function EficienciaPage() {
       porDia.set(d.data, atual);
     }
   }
-  const ultimosDias = Array.from(porDia.values())
+  const diasApurados = Array.from(porDia.values())
     .filter((d) => d.produzido > 0 && d.disponivel > 0)
-    .sort((a, b) => a.data.localeCompare(b.data))
-    .slice(-10);
+    .sort((a, b) => a.data.localeCompare(b.data));
   const situacao =
     efPeriodo === null ? null : efPeriodo >= 0.85 ? "Dentro do esperado" : efPeriodo >= 0.65 ? "Atenção" : "Abaixo do esperado";
   const IconeSituacao = efPeriodo !== null && efPeriodo >= 0.85 ? CheckCircle2 : AlertTriangle;
@@ -246,12 +231,13 @@ export default function EficienciaPage() {
           </p>
         </section>
 
-        <section className="bloco" aria-busy={carregandoHistorico}>
-          <h2>Últimos 10 dias apurados</h2>
+        <section className="bloco" aria-busy={carregando}>
+          <h2>Eficiência por dia</h2>
           <p className="bloco-descricao" style={{ marginBottom: 12 }}>
-            Eficiência da equipe em cada dia com produção, até {formatarData(fim)}.
+            Dias com produção entre {formatarData(inicio)} e {formatarData(fim)}
+            {tabela.filtrando ? ", costureiras filtradas" : ""}.
           </p>
-          <GraficoEficiencia pontos={ultimosDias} carregando={carregandoHistorico} />
+          <GraficoEficiencia pontos={diasApurados} carregando={carregando} />
         </section>
       </div>
 
