@@ -1,0 +1,186 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseServer } from "@/lib/supabase";
+import { buscarTodos, emBlocos, respostaErro } from "@/lib/producao-api";
+import { PARTES, Parte } from "@/lib/producao";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const CAMPOS_TICKET = "id, op, item_id, referencia, nome_item, cor, tamanho, partes, quantidade, created_at";
+const CAMPOS_OPERACAO =
+  "id, ticket_id, operacao_id, nome_operacao, maquina, parte, ordem, tempo_minutos, quantidade, minutos_total, costureira_id, data_producao, apontado_em";
+
+// ?ids=1,2,3 → tickets completos (para imprimir)
+// ?op=123     → filtra pela OP; sem filtro traz os 200 mais recentes
+export async function GET(req: NextRequest) {
+  try {
+    const supabase = getSupabaseServer();
+    const ids = (req.nextUrl.searchParams.get("ids") ?? "")
+      .split(",")
+      .map(Number)
+      .filter((n) => n > 0);
+    const op = req.nextUrl.searchParams.get("op")?.trim();
+
+    let consulta = supabase.from("tickets").select(CAMPOS_TICKET).order("id", { ascending: false });
+    if (ids.length > 0) consulta = consulta.in("id", ids);
+    else if (op) consulta = consulta.eq("op", op);
+    const { data: tickets, error } = await consulta.limit(ids.length > 0 ? ids.length : 200);
+    if (error) throw error;
+
+    const operacoes = [];
+    for (const bloco of emBlocos((tickets ?? []).map((t) => t.id))) {
+      operacoes.push(
+        ...(await buscarTodos((de, ate) =>
+          supabase
+            .from("ticket_operacoes")
+            .select(CAMPOS_OPERACAO)
+            .in("ticket_id", bloco)
+            .order("id")
+            .range(de, ate)
+        ))
+      );
+    }
+
+    const porTicket = new Map<number, typeof operacoes>();
+    for (const o of operacoes) {
+      const lista = porTicket.get(o.ticket_id) ?? [];
+      lista.push({ ...o, tempo_minutos: Number(o.tempo_minutos), minutos_total: Number(o.minutos_total) });
+      porTicket.set(o.ticket_id, lista);
+    }
+    const resultado = (tickets ?? []).map((t) => ({ ...t, operacoes: porTicket.get(t.id) ?? [] }));
+    if (ids.length > 0) resultado.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+    return NextResponse.json({ tickets: resultado });
+  } catch (err) {
+    return respostaErro(err);
+  }
+}
+
+// body: { op, item_id, cor, partes: ["superior"...], pecas_por_pacote?, linhas: [{ tamanho, quantidade }] }
+// Gera um ticket por tamanho (ou vários, se informado o tamanho do pacote).
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const op = String(body.op ?? "").trim();
+    const cor = String(body.cor ?? "").trim() || null;
+    const partes = (Array.isArray(body.partes) ? body.partes : []).filter((p: string) =>
+      (PARTES as string[]).includes(p)
+    ) as Parte[];
+    const porPacote = Math.max(0, Math.floor(Number(body.pecas_por_pacote) || 0));
+    const linhas = (Array.isArray(body.linhas) ? body.linhas : [])
+      .map((l: { tamanho?: string; quantidade?: number }) => ({
+        tamanho: String(l.tamanho ?? "").trim() || null,
+        quantidade: Math.floor(Number(l.quantidade) || 0),
+      }))
+      .filter((l: { quantidade: number }) => l.quantidade > 0);
+
+    if (!op) return respostaErro(new Error("Informe a OP"), 400);
+    if (!body.item_id) return respostaErro(new Error("Selecione a referência"), 400);
+    if (partes.length === 0) return respostaErro(new Error("Selecione a parte"), 400);
+    if (linhas.length === 0) return respostaErro(new Error("Informe a quantidade de ao menos um tamanho"), 400);
+
+    const supabase = getSupabaseServer();
+    const { data: item, error: erroItem } = await supabase
+      .from("itens")
+      .select("id, referencia, nome")
+      .eq("id", body.item_id)
+      .single();
+    if (erroItem) throw erroItem;
+
+    const { data: vinculos, error: erroVinculos } = await supabase
+      .from("item_operacoes")
+      .select("ordem, operacoes(id, nome, tempo_minutos, maquina, parte)")
+      .eq("item_id", item.id)
+      .order("ordem");
+    if (erroVinculos) throw erroVinculos;
+
+    type OperacaoCadastro = { id: number; nome: string; tempo_minutos: number; maquina: string | null; parte: Parte };
+    const sequencia = (vinculos ?? [])
+      .map((v) => v.operacoes as unknown as OperacaoCadastro | null)
+      .filter((o): o is OperacaoCadastro => !!o && partes.includes(o.parte));
+    if (sequencia.length === 0) {
+      return respostaErro(new Error("Esse item não tem operações vinculadas para a parte selecionada"), 400);
+    }
+
+    // Quebra cada tamanho em pacotes, se pedido
+    const pacotes: { tamanho: string | null; quantidade: number }[] = [];
+    for (const l of linhas) {
+      if (porPacote > 0 && l.quantidade > porPacote) {
+        for (let resto = l.quantidade; resto > 0; resto -= porPacote) {
+          pacotes.push({ tamanho: l.tamanho, quantidade: Math.min(porPacote, resto) });
+        }
+      } else {
+        pacotes.push(l);
+      }
+    }
+    if (pacotes.length > 300) return respostaErro(new Error("Muitos tickets de uma vez (máximo 300)"), 400);
+
+    const { data: criados, error: erroTickets } = await supabase
+      .from("tickets")
+      .insert(
+        pacotes.map((p) => ({
+          op,
+          item_id: item.id,
+          referencia: item.referencia,
+          nome_item: item.nome,
+          cor,
+          tamanho: p.tamanho,
+          partes,
+          quantidade: p.quantidade,
+        }))
+      )
+      .select("id, quantidade");
+    if (erroTickets) throw erroTickets;
+
+    const linhasOperacoes = [];
+    for (const t of criados ?? []) {
+      const ordemPorParte: Record<string, number> = {};
+      for (const o of sequencia) {
+        ordemPorParte[o.parte] = (ordemPorParte[o.parte] ?? 0) + 1;
+        const tempo = Number(o.tempo_minutos);
+        linhasOperacoes.push({
+          ticket_id: t.id,
+          operacao_id: o.id,
+          nome_operacao: o.nome,
+          maquina: o.maquina,
+          parte: o.parte,
+          ordem: ordemPorParte[o.parte],
+          tempo_minutos: tempo,
+          quantidade: t.quantidade,
+          minutos_total: Math.round(tempo * t.quantidade * 10000) / 10000,
+        });
+      }
+    }
+    for (const bloco of emBlocos(linhasOperacoes, 1000)) {
+      const { error } = await supabase.from("ticket_operacoes").insert(bloco);
+      if (error) {
+        await supabase.from("tickets").delete().in("id", (criados ?? []).map((t) => t.id));
+        throw error;
+      }
+    }
+
+    return NextResponse.json({ ok: true, ids: (criados ?? []).map((t) => t.id) });
+  } catch (err) {
+    return respostaErro(err);
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const id = Number(req.nextUrl.searchParams.get("id"));
+    const supabase = getSupabaseServer();
+    const { count, error: erroContagem } = await supabase
+      .from("ticket_operacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("ticket_id", id)
+      .not("costureira_id", "is", null);
+    if (erroContagem) throw erroContagem;
+    if (count) {
+      return respostaErro(new Error("Esse ticket já tem operações apontadas. Desfaça os apontamentos antes."), 400);
+    }
+    const { error } = await supabase.from("tickets").delete().eq("id", id);
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return respostaErro(err);
+  }
+}
