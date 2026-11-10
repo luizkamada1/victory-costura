@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { useTabela } from "@/components/Tabela";
 import { NOME_PARTE, Operacao, PARTES, Parte } from "@/lib/producao";
 
 type Form = { id?: number; nome: string; tempo_minutos: string; maquina: string; parte: Parte };
@@ -10,7 +11,6 @@ const VAZIO: Form = { nome: "", tempo_minutos: "", maquina: "", parte: "superior
 export default function OperacoesPage() {
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [form, setForm] = useState<Form>(VAZIO);
-  const [busca, setBusca] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -56,9 +56,22 @@ export default function OperacoesPage() {
   }
 
   const maquinas = Array.from(new Set(operacoes.map((o) => o.maquina).filter(Boolean))) as string[];
-  const termo = busca.trim().toLowerCase();
-  const filtradas = operacoes.filter(
-    (o) => !termo || o.nome.toLowerCase().includes(termo) || (o.maquina ?? "").toLowerCase().includes(termo)
+  const tabela = useTabela<Operacao>(
+    operacoes,
+    [
+      { id: "parte", titulo: "Parte", valor: (o) => NOME_PARTE[o.parte] },
+      { id: "nome", titulo: "Operação", valor: (o) => o.nome },
+      { id: "maquina", titulo: "Máquina", valor: (o) => o.maquina },
+      {
+        id: "tempo",
+        titulo: "Tempo (min)",
+        alinhar: "right",
+        valor: (o) => o.tempo_minutos,
+        texto: (o) => o.tempo_minutos.toLocaleString("pt-BR", { maximumFractionDigits: 4 }),
+      },
+      { id: "acoes", titulo: "", alinhar: "right" },
+    ],
+    { id: "parte", direcao: "desc" }
   );
   const tempo = Number(form.tempo_minutos.replace(",", "."));
 
@@ -130,70 +143,51 @@ export default function OperacoesPage() {
       </form>
 
       <section style={ui.secao}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <h2 style={ui.secaoTitulo}>
-            Operações cadastradas <span style={ui.badge}>{operacoes.length}</span>
-          </h2>
-          <input
-            style={{ ...ui.input, maxWidth: 260 }}
-            placeholder="Buscar operação ou máquina"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
+        <h2 style={ui.secaoTitulo}>
+          Operações cadastradas <span style={ui.badge}>{operacoes.length}</span>
+        </h2>
+        <div style={{ overflowX: "auto", marginTop: 12 }}>
+          <table style={ui.tabela}>
+            {tabela.thead}
+            <tbody>
+              {tabela.visiveis.map((o) => (
+                <tr key={o.id} style={form.id === o.id ? { background: "#eef2ff" } : undefined}>
+                  <td style={ui.td}>
+                    <span style={{ ...ui.badge, ...(o.parte === "inferior" ? { background: "#fef3c7", color: "#92400e" } : {}) }}>
+                      {NOME_PARTE[o.parte]}
+                    </span>
+                  </td>
+                  <td style={{ ...ui.td, fontWeight: 600 }}>{o.nome}</td>
+                  <td style={ui.td}>{o.maquina ?? "—"}</td>
+                  <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {o.tempo_minutos.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}
+                  </td>
+                  <td style={{ ...ui.td, textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button
+                      style={ui.botaoSecundario}
+                      onClick={() =>
+                        setForm({
+                          id: o.id,
+                          nome: o.nome,
+                          tempo_minutos: String(o.tempo_minutos).replace(".", ","),
+                          maquina: o.maquina ?? "",
+                          parte: o.parte,
+                        })
+                      }
+                    >
+                      Editar
+                    </button>{" "}
+                    <button style={ui.botaoPerigo} onClick={() => excluir(o)}>
+                      Excluir
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {tabela.rodape}
+          {tabela.visiveis.length === 0 && <p style={ui.vazio}>Nenhuma operação encontrada.</p>}
         </div>
-        {PARTES.map((parte) => {
-          const lista = filtradas.filter((o) => o.parte === parte);
-          return (
-            <div key={parte} style={{ marginTop: 18 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 800, color: "#4338ca", margin: "0 0 6px", textTransform: "uppercase" }}>
-                {NOME_PARTE[parte]}
-              </h3>
-              <div style={{ overflowX: "auto" }}>
-                <table style={ui.tabela}>
-                  <thead>
-                    <tr>
-                      <th style={ui.th}>Operação</th>
-                      <th style={ui.th}>Máquina</th>
-                      <th style={{ ...ui.th, textAlign: "right" }}>Tempo (min)</th>
-                      <th style={ui.th}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lista.map((o) => (
-                      <tr key={o.id} style={form.id === o.id ? { background: "#eef2ff" } : undefined}>
-                        <td style={{ ...ui.td, fontWeight: 600 }}>{o.nome}</td>
-                        <td style={ui.td}>{o.maquina ?? "—"}</td>
-                        <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                          {o.tempo_minutos.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}
-                        </td>
-                        <td style={{ ...ui.td, textAlign: "right", whiteSpace: "nowrap" }}>
-                          <button
-                            style={ui.botaoSecundario}
-                            onClick={() =>
-                              setForm({
-                                id: o.id,
-                                nome: o.nome,
-                                tempo_minutos: String(o.tempo_minutos).replace(".", ","),
-                                maquina: o.maquina ?? "",
-                                parte: o.parte,
-                              })
-                            }
-                          >
-                            Editar
-                          </button>{" "}
-                          <button style={ui.botaoPerigo} onClick={() => excluir(o)}>
-                            Excluir
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {lista.length === 0 && <p style={ui.vazio}>Nenhuma operação.</p>}
-              </div>
-            </div>
-          );
-        })}
       </section>
       <style>{`@media (max-width: 700px) { .grade-responsiva { grid-template-columns: 1fr 1fr !important; } }`}</style>
     </ProducaoLayout>

@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { useTabela } from "@/components/Tabela";
 import { DIAS_SEMANA, corEficiencia, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
 
 type Dia = {
@@ -64,7 +65,6 @@ const pct = (ef: number | null) => (ef === null ? "—" : `${(ef * 100).toFixed(
 export default function EficienciaPage() {
   const [[inicio, fim], setPeriodo] = useState<[string, string]>(periodo("mes"));
   const [preset, setPreset] = useState("mes");
-  const [setor, setSetor] = useState("");
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -80,10 +80,38 @@ export default function EficienciaPage() {
       .finally(() => setCarregando(false));
   }, [inicio, fim]);
 
-  const setores = Array.from(new Set(linhas.map((l) => l.setor).filter(Boolean))) as string[];
-  const visiveis = linhas
-    .filter((l) => !setor || l.setor === setor)
-    .sort((a, b) => (b.eficiencia ?? -1) - (a.eficiencia ?? -1));
+  const tabela = useTabela<Linha>(
+    linhas,
+    [
+      { id: "nome", titulo: "Costureira", valor: (l) => l.nome },
+      { id: "setor", titulo: "Setor", valor: (l) => l.setor },
+      {
+        id: "disponivel",
+        titulo: "Disponível",
+        alinhar: "right",
+        valor: (l) => l.disponivel,
+        texto: (l) => formatarMinutos(l.disponivel),
+      },
+      {
+        id: "produzido",
+        titulo: "Produzido",
+        alinhar: "right",
+        valor: (l) => l.produzido,
+        texto: (l) => formatarMinutos(l.produzido),
+      },
+      { id: "tickets", titulo: "Tickets", alinhar: "right", valor: (l) => l.operacoes },
+      {
+        id: "eficiencia",
+        titulo: "Eficiência",
+        largura: 260,
+        // em %, para o filtro aceitar ">80"
+        valor: (l) => (l.eficiencia === null ? null : Math.round(l.eficiencia * 1000) / 10),
+        texto: (l) => pct(l.eficiencia),
+      },
+    ],
+    { id: "eficiencia", direcao: "desc" }
+  );
+  const visiveis = tabela.visiveis;
   const totalDisp = visiveis.reduce((s, l) => s + l.disponivel, 0);
   const totalProd = visiveis.reduce((s, l) => s + l.produzido, 0);
   const efEquipe = totalDisp > 0 ? totalProd / totalDisp : null;
@@ -161,17 +189,6 @@ export default function EficienciaPage() {
             }}
           />
         </label>
-        {setores.length > 0 && (
-          <label style={ui.campo}>
-            <span style={ui.label}>Setor</span>
-            <select style={ui.input} value={setor} onChange={(e) => setSetor(e.target.value)}>
-              <option value="">Todos</option>
-              {setores.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
-          </label>
-        )}
         <button style={{ ...ui.botaoSecundario, marginLeft: "auto" }} onClick={exportar} disabled={!visiveis.length}>
           Exportar Excel
         </button>
@@ -187,19 +204,12 @@ export default function EficienciaPage() {
         <h2 style={ui.secaoTitulo}>
           Ranking {carregando && <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 500 }}>atualizando…</span>}
         </h2>
-        <p style={ui.secaoDescricao}>Clique numa costureira para ver o detalhe por dia.</p>
+        <p style={ui.secaoDescricao}>
+          Clique numa costureira para ver o detalhe por dia. Os totais acima seguem os filtros da tabela.
+        </p>
         <div style={{ overflowX: "auto" }}>
           <table style={ui.tabela}>
-            <thead>
-              <tr>
-                <th style={ui.th}>Costureira</th>
-                <th style={ui.th}>Setor</th>
-                <th style={{ ...ui.th, textAlign: "right" }}>Disponível</th>
-                <th style={{ ...ui.th, textAlign: "right" }}>Produzido</th>
-                <th style={{ ...ui.th, textAlign: "right" }}>Tickets</th>
-                <th style={{ ...ui.th, width: 260 }}>Eficiência</th>
-              </tr>
-            </thead>
+            {tabela.thead}
             <tbody>
               {visiveis.map((l) => (
                 <Fragment key={l.id}>
@@ -219,52 +229,7 @@ export default function EficienciaPage() {
                   {aberta === l.id && (
                     <tr>
                       <td colSpan={6} style={{ ...ui.td, background: "#fafafa", padding: "8px 16px 14px" }}>
-                        <table style={{ ...ui.tabela, fontSize: 12.5 }}>
-                          <thead>
-                            <tr>
-                              <th style={ui.th}>Dia</th>
-                              <th style={{ ...ui.th, textAlign: "right" }}>Jornada</th>
-                              <th style={{ ...ui.th, textAlign: "right" }}>Ocorrências</th>
-                              <th style={{ ...ui.th, textAlign: "right" }}>Disponível</th>
-                              <th style={{ ...ui.th, textAlign: "right" }}>Produzido</th>
-                              <th style={{ ...ui.th, textAlign: "right" }}>Tickets</th>
-                              <th style={{ ...ui.th, width: 220 }}>Eficiência</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {l.dias.map((d) => (
-                              <tr key={d.data}>
-                                <td style={ui.td}>
-                                  {formatarData(d.data)}{" "}
-                                  <span style={{ color: "#9ca3af" }}>{DIAS_SEMANA[diaSemana(d.data)].slice(0, 3)}</span>
-                                </td>
-                                <td style={{ ...ui.td, textAlign: "right" }}>{d.jornada}</td>
-                                <td
-                                  style={{
-                                    ...ui.td,
-                                    textAlign: "right",
-                                    color: d.ocorrencias < 0 ? "#b91c1c" : d.ocorrencias > 0 ? "#15803d" : "#9ca3af",
-                                  }}
-                                >
-                                  {d.ocorrencias > 0 ? "+" : ""}
-                                  {d.ocorrencias || "—"}
-                                </td>
-                                <td style={{ ...ui.td, textAlign: "right" }}>{d.disponivel}</td>
-                                <td style={{ ...ui.td, textAlign: "right" }}>
-                                  {d.produzido.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
-                                </td>
-                                <td style={{ ...ui.td, textAlign: "right" }}>{d.operacoes}</td>
-                                <td style={ui.td}>
-                                  {d.disponivel > 0 ? (
-                                    <BarraEficiencia ef={d.produzido / d.disponivel} />
-                                  ) : (
-                                    <span style={{ color: "#b45309", fontSize: 12 }}>produção sem jornada</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <DetalheDias dias={l.dias} />
                         {l.dias.length === 0 && <p style={ui.vazio}>Sem jornada nem produção no período.</p>}
                       </td>
                     </tr>
@@ -273,10 +238,85 @@ export default function EficienciaPage() {
               ))}
             </tbody>
           </table>
+          {tabela.rodape}
           {visiveis.length === 0 && !carregando && <p style={ui.vazio}>Nenhuma costureira encontrada.</p>}
         </div>
       </section>
     </ProducaoLayout>
+  );
+}
+
+function DetalheDias({ dias }: { dias: Dia[] }) {
+  const ef = (d: Dia) => (d.disponivel > 0 ? d.produzido / d.disponivel : null);
+  const tabela = useTabela<Dia>(dias, [
+    {
+      id: "data",
+      titulo: "Dia",
+      valor: (d) => d.data,
+      texto: (d) => `${formatarData(d.data)} ${DIAS_SEMANA[diaSemana(d.data)]}`,
+    },
+    { id: "jornada", titulo: "Jornada", alinhar: "right", valor: (d) => d.jornada },
+    { id: "ocorrencias", titulo: "Ocorrências", alinhar: "right", valor: (d) => d.ocorrencias },
+    { id: "disponivel", titulo: "Disponível", alinhar: "right", valor: (d) => d.disponivel },
+    {
+      id: "produzido",
+      titulo: "Produzido",
+      alinhar: "right",
+      valor: (d) => d.produzido,
+      texto: (d) => d.produzido.toLocaleString("pt-BR", { maximumFractionDigits: 1 }),
+    },
+    { id: "tickets", titulo: "Tickets", alinhar: "right", valor: (d) => d.operacoes },
+    {
+      id: "eficiencia",
+      titulo: "Eficiência",
+      largura: 220,
+      valor: (d) => {
+        const e = ef(d);
+        return e === null ? null : Math.round(e * 1000) / 10;
+      },
+      texto: (d) => (d.disponivel > 0 ? pct(ef(d)) : "produção sem jornada"),
+    },
+  ]);
+  return (
+    <>
+      <table style={{ ...ui.tabela, fontSize: 12.5 }}>
+        {tabela.thead}
+        <tbody>
+          {tabela.visiveis.map((d) => (
+            <tr key={d.data}>
+              <td style={ui.td}>
+                {formatarData(d.data)}{" "}
+                <span style={{ color: "#9ca3af" }}>{DIAS_SEMANA[diaSemana(d.data)].slice(0, 3)}</span>
+              </td>
+              <td style={{ ...ui.td, textAlign: "right" }}>{d.jornada}</td>
+              <td
+                style={{
+                  ...ui.td,
+                  textAlign: "right",
+                  color: d.ocorrencias < 0 ? "#b91c1c" : d.ocorrencias > 0 ? "#15803d" : "#9ca3af",
+                }}
+              >
+                {d.ocorrencias > 0 ? "+" : ""}
+                {d.ocorrencias || "—"}
+              </td>
+              <td style={{ ...ui.td, textAlign: "right" }}>{d.disponivel}</td>
+              <td style={{ ...ui.td, textAlign: "right" }}>
+                {d.produzido.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+              </td>
+              <td style={{ ...ui.td, textAlign: "right" }}>{d.operacoes}</td>
+              <td style={ui.td}>
+                {d.disponivel > 0 ? (
+                  <BarraEficiencia ef={ef(d)} />
+                ) : (
+                  <span style={{ color: "#b45309", fontSize: 12 }}>produção sem jornada</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {tabela.rodape}
+    </>
   );
 }
 

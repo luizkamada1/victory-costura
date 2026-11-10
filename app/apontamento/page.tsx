@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { useTabela } from "@/components/Tabela";
 import {
   Costureira,
   NOME_PARTE,
@@ -133,6 +134,31 @@ export default function ApontamentoPage() {
   const produzido = apontamentos.reduce((s, a) => s + a.minutos_total, 0);
   const pecas = apontamentos.reduce((s, a) => s + a.quantidade, 0);
   const eficiencia = resumo && resumo.disponivel > 0 ? produzido / resumo.disponivel : null;
+  const tabela = useTabela<Apontamento>(apontamentos, [
+    { id: "codigo", titulo: "Código", valor: (a) => codigoBarras(a.id) },
+    { id: "op", titulo: "OP", valor: (a) => a.ticket.op },
+    {
+      id: "ref",
+      titulo: "Ref / Cor / Tam",
+      valor: (a) => a.ticket.referencia,
+      texto: (a) => `${a.ticket.referencia} ${a.ticket.cor ?? ""} ${a.ticket.tamanho ?? ""}`,
+    },
+    {
+      id: "operacao",
+      titulo: "Operação",
+      valor: (a) => a.nome_operacao,
+      texto: (a) => `${a.nome_operacao} ${NOME_PARTE[a.parte]} ${a.maquina ?? ""}`,
+    },
+    { id: "qtd", titulo: "Qtd", alinhar: "right", valor: (a) => a.quantidade },
+    {
+      id: "minutos",
+      titulo: "Minutos",
+      alinhar: "right",
+      valor: (a) => a.minutos_total,
+      texto: (a) => a.minutos_total.toLocaleString("pt-BR", { maximumFractionDigits: 1 }),
+    },
+    { id: "acoes", titulo: "", alinhar: "right" },
+  ]);
 
   return (
     <ProducaoLayout titulo="Apontamento de Produção" subtitulo="Escaneie os tickets que a costureira entregou">
@@ -224,19 +250,9 @@ export default function ApontamentoPage() {
             <h2 style={ui.secaoTitulo}>Operações apontadas no dia</h2>
             <div style={{ overflowX: "auto", marginTop: 10 }}>
               <table style={ui.tabela}>
-                <thead>
-                  <tr>
-                    <th style={ui.th}>Código</th>
-                    <th style={ui.th}>OP</th>
-                    <th style={ui.th}>Ref / Cor / Tam</th>
-                    <th style={ui.th}>Operação</th>
-                    <th style={{ ...ui.th, textAlign: "right" }}>Qtd</th>
-                    <th style={{ ...ui.th, textAlign: "right" }}>Minutos</th>
-                    <th style={ui.th}></th>
-                  </tr>
-                </thead>
+                {tabela.thead}
                 <tbody>
-                  {apontamentos.map((a) => (
+                  {tabela.visiveis.map((a) => (
                     <tr key={a.id}>
                       <td style={{ ...ui.td, fontFamily: "monospace", color: "#6b7280" }}>{codigoBarras(a.id)}</td>
                       <td style={{ ...ui.td, fontWeight: 700 }}>{a.ticket.op}</td>
@@ -262,6 +278,7 @@ export default function ApontamentoPage() {
                   ))}
                 </tbody>
               </table>
+              {tabela.rodape}
               {apontamentos.length === 0 && <p style={ui.vazio}>Nenhum ticket apontado para essa costureira nesse dia.</p>}
             </div>
           </section>

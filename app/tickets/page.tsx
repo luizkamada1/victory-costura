@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { useTabela } from "@/components/Tabela";
 import {
   Costureira,
   Item,
@@ -10,6 +11,7 @@ import {
   PARTES,
   Parte,
   Ticket,
+  TicketOperacao,
   codigoBarras,
   formatarData,
 } from "@/lib/producao";
@@ -143,6 +145,41 @@ export default function TicketsPage() {
   }
 
   const nomeCostureira = (id: number | null) => costureiras.find((c) => c.id === id)?.nome ?? "—";
+  const apontadas = (t: Ticket) => t.operacoes.filter((o) => o.costureira_id).length;
+
+  // As linhas visíveis só existem depois do useTabela; o checkbox do título lê esta variável
+  // ao renderizar (o que acontece depois desta função terminar), então sempre vê o valor atual.
+  let idsVisiveis: number[] = [];
+  const tabela = useTabela<Ticket>(
+    tickets,
+    [
+      {
+        id: "selecao",
+        titulo: <MarcarTodos ids={() => idsVisiveis} selecionados={selecionados} onChange={setSelecionados} />,
+        ordenavel: false,
+        filtravel: false,
+      },
+      { id: "id", titulo: "Ticket", valor: (t) => t.id, texto: (t) => `#${t.id}` },
+      { id: "op", titulo: "OP", valor: (t) => t.op },
+      { id: "referencia", titulo: "Ref.", valor: (t) => t.referencia },
+      { id: "cor", titulo: "Cor", valor: (t) => t.cor },
+      { id: "tamanho", titulo: "Tam.", valor: (t) => t.tamanho },
+      { id: "quantidade", titulo: "Qtd", alinhar: "right", valor: (t) => t.quantidade },
+      {
+        id: "apontadas",
+        titulo: "Apontadas",
+        valor: (t) => (t.operacoes.length ? apontadas(t) / t.operacoes.length : 0),
+        texto: (t) => {
+          const f = apontadas(t);
+          return f === 0 ? "pendente" : f === t.operacoes.length ? "completo" : "em andamento";
+        },
+      },
+      { id: "criado", titulo: "Gerado em", valor: (t) => t.created_at, texto: (t) => formatarData(t.created_at) },
+      { id: "acoes", titulo: "", alinhar: "right" },
+    ],
+    { id: "id", direcao: "desc" }
+  );
+  idsVisiveis = tabela.visiveis.map((t) => t.id);
 
   return (
     <ProducaoLayout titulo="Tickets de Produção" subtitulo="Geração e impressão dos tickets com código de barras">
@@ -302,29 +339,10 @@ export default function TicketsPage() {
         </div>
         <div style={{ overflowX: "auto", marginTop: 12 }}>
           <table style={ui.tabela}>
-            <thead>
-              <tr>
-                <th style={ui.th}>
-                  <input
-                    type="checkbox"
-                    checked={tickets.length > 0 && selecionados.size === tickets.length}
-                    onChange={(e) => setSelecionados(new Set(e.target.checked ? tickets.map((t) => t.id) : []))}
-                  />
-                </th>
-                <th style={ui.th}>Ticket</th>
-                <th style={ui.th}>OP</th>
-                <th style={ui.th}>Ref.</th>
-                <th style={ui.th}>Cor</th>
-                <th style={ui.th}>Tam.</th>
-                <th style={{ ...ui.th, textAlign: "right" }}>Qtd</th>
-                <th style={ui.th}>Apontadas</th>
-                <th style={ui.th}>Gerado em</th>
-                <th style={ui.th}></th>
-              </tr>
-            </thead>
+            {tabela.thead}
             <tbody>
-              {tickets.map((t) => {
-                const feitas = t.operacoes.filter((o) => o.costureira_id).length;
+              {tabela.visiveis.map((t) => {
+                const feitas = apontadas(t);
                 const total = t.operacoes.length;
                 return (
                   <Fragment key={t.id}>
@@ -374,24 +392,7 @@ export default function TicketsPage() {
                     {aberto === t.id && (
                       <tr>
                         <td colSpan={10} style={{ ...ui.td, background: "#fafafa", padding: "10px 16px" }}>
-                          <table style={{ ...ui.tabela, fontSize: 12.5 }}>
-                            <tbody>
-                              {t.operacoes.map((o) => (
-                                <tr key={o.id}>
-                                  <td style={{ padding: "3px 8px", color: "#6b7280", width: 110 }}>{NOME_PARTE[o.parte]}</td>
-                                  <td style={{ padding: "3px 8px", width: 30, fontWeight: 700 }}>{o.ordem}º</td>
-                                  <td style={{ padding: "3px 8px" }}>{o.nome_operacao}</td>
-                                  <td style={{ padding: "3px 8px", color: "#6b7280" }}>{o.maquina ?? "—"}</td>
-                                  <td style={{ padding: "3px 8px", fontFamily: "monospace" }}>{codigoBarras(o.id)}</td>
-                                  <td style={{ padding: "3px 8px", fontWeight: 600, color: o.costureira_id ? "#15803d" : "#9ca3af" }}>
-                                    {o.costureira_id
-                                      ? `${nomeCostureira(o.costureira_id)} · ${formatarData(o.data_producao ?? "")}`
-                                      : "pendente"}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                          <OperacoesDoTicket operacoes={t.operacoes} nomeCostureira={nomeCostureira} />
                         </td>
                       </tr>
                     )}
@@ -400,10 +401,70 @@ export default function TicketsPage() {
               })}
             </tbody>
           </table>
-          {tickets.length === 0 && <p style={ui.vazio}>Nenhum ticket encontrado.</p>}
+          {tabela.rodape}
+          {tabela.visiveis.length === 0 && <p style={ui.vazio}>Nenhum ticket encontrado.</p>}
         </div>
       </section>
     </ProducaoLayout>
+  );
+}
+
+function MarcarTodos({
+  ids,
+  selecionados,
+  onChange,
+}: {
+  ids: () => number[];
+  selecionados: Set<number>;
+  onChange: (s: Set<number>) => void;
+}) {
+  const lista = ids();
+  const todos = lista.length > 0 && lista.every((id) => selecionados.has(id));
+  return (
+    <input
+      type="checkbox"
+      title="Selecionar todos os visíveis"
+      checked={todos}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(new Set(e.target.checked ? lista : []))}
+    />
+  );
+}
+
+function OperacoesDoTicket({
+  operacoes,
+  nomeCostureira,
+}: {
+  operacoes: TicketOperacao[];
+  nomeCostureira: (id: number | null) => string;
+}) {
+  const situacao = (o: TicketOperacao) =>
+    o.costureira_id ? `${nomeCostureira(o.costureira_id)} · ${formatarData(o.data_producao ?? "")}` : "pendente";
+  const tabela = useTabela<TicketOperacao>(operacoes, [
+    { id: "parte", titulo: "Parte", valor: (o) => NOME_PARTE[o.parte] },
+    { id: "ordem", titulo: "Ordem", valor: (o) => o.ordem, texto: (o) => `${o.ordem}º` },
+    { id: "nome", titulo: "Operação", valor: (o) => o.nome_operacao },
+    { id: "maquina", titulo: "Máquina", valor: (o) => o.maquina },
+    { id: "codigo", titulo: "Código", valor: (o) => codigoBarras(o.id) },
+    { id: "situacao", titulo: "Feita por", valor: situacao },
+  ]);
+  const celula: React.CSSProperties = { padding: "4px 8px", borderBottom: "1px solid #f1f2f4" };
+  return (
+    <table style={{ ...ui.tabela, fontSize: 12.5 }}>
+      {tabela.thead}
+      <tbody>
+        {tabela.visiveis.map((o) => (
+          <tr key={o.id}>
+            <td style={{ ...celula, color: "#6b7280" }}>{NOME_PARTE[o.parte]}</td>
+            <td style={{ ...celula, fontWeight: 700 }}>{o.ordem}º</td>
+            <td style={celula}>{o.nome_operacao}</td>
+            <td style={{ ...celula, color: "#6b7280" }}>{o.maquina ?? "—"}</td>
+            <td style={{ ...celula, fontFamily: "monospace" }}>{codigoBarras(o.id)}</td>
+            <td style={{ ...celula, fontWeight: 600, color: o.costureira_id ? "#15803d" : "#9ca3af" }}>{situacao(o)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

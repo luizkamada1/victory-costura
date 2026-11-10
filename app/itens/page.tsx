@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { useTabela } from "@/components/Tabela";
 import { GRADES, Item, NOME_PARTE, Operacao, PARTES, Parte } from "@/lib/producao";
 
 type Form = {
@@ -35,7 +36,6 @@ export default function ItensPage() {
   const [itens, setItens] = useState<Item[]>([]);
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [form, setForm] = useState<Form | null>(null);
-  const [busca, setBusca] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -140,10 +140,31 @@ export default function ItensPage() {
   }
 
   const tempoParte = (ids: number[]) => ids.reduce((s, id) => s + (porId.get(id)?.tempo_minutos ?? 0), 0);
-  const termo = busca.trim().toLowerCase();
-  const filtrados = itens.filter(
-    (i) => !termo || i.referencia.toLowerCase().includes(termo) || i.nome.toLowerCase().includes(termo)
+  const opsDoItem = (item: Item) =>
+    item.operacoes.map((v) => porId.get(v.operacao_id)).filter(Boolean) as Operacao[];
+  const tabela = useTabela<Item>(
+    itens,
+    [
+      { id: "referencia", titulo: "Ref.", valor: (i) => i.referencia },
+      { id: "nome", titulo: "Nome", valor: (i) => i.nome },
+      {
+        id: "grade",
+        titulo: "Grade / Tamanhos",
+        valor: (i) => i.grades.join(", "),
+        texto: (i) => `${i.grades.join(", ")} ${i.tamanhos.join(" ")}`,
+      },
+      { id: "cores", titulo: "Cores", valor: (i) => i.cores.join(", ") },
+      {
+        id: "operacoes",
+        titulo: "Operações",
+        valor: (i) => opsDoItem(i).reduce((s, o) => s + o.tempo_minutos, 0),
+        texto: (i) => i.partes.map((p) => NOME_PARTE[p]).join(" "),
+      },
+      { id: "acoes", titulo: "", alinhar: "right" },
+    ],
+    { id: "referencia", direcao: "asc" }
   );
+  const filtrados = tabela.visiveis;
 
   return (
     <ProducaoLayout titulo="Itens" subtitulo="Referências, grades, cores e sequência de operações">
@@ -332,12 +353,6 @@ export default function ItensPage() {
             Itens <span style={ui.badge}>{itens.length}</span>
           </h2>
           <div style={{ display: "flex", gap: 8 }}>
-            <input
-              style={{ ...ui.input, maxWidth: 240 }}
-              placeholder="Buscar referência ou nome"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-            />
             {!form && (
               <button style={ui.botaoPrimario} onClick={() => setForm({ ...VAZIO })}>
                 + Novo item
@@ -347,16 +362,7 @@ export default function ItensPage() {
         </div>
         <div style={{ overflowX: "auto", marginTop: 12 }}>
           <table style={ui.tabela}>
-            <thead>
-              <tr>
-                <th style={ui.th}>Ref.</th>
-                <th style={ui.th}>Nome</th>
-                <th style={ui.th}>Grade / Tamanhos</th>
-                <th style={ui.th}>Cores</th>
-                <th style={ui.th}>Operações</th>
-                <th style={ui.th}></th>
-              </tr>
-            </thead>
+            {tabela.thead}
             <tbody>
               {filtrados.map((item) => {
                 const ops = item.operacoes.map((v) => porId.get(v.operacao_id)).filter(Boolean) as Operacao[];
@@ -396,7 +402,8 @@ export default function ItensPage() {
               })}
             </tbody>
           </table>
-          {filtrados.length === 0 && <p style={ui.vazio}>Nenhum item cadastrado.</p>}
+          {tabela.rodape}
+          {filtrados.length === 0 && <p style={ui.vazio}>Nenhum item encontrado.</p>}
         </div>
       </section>
     </ProducaoLayout>

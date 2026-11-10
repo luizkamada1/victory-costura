@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { useTabela } from "@/components/Tabela";
 import {
   Costureira,
   DIAS_SEMANA,
@@ -121,6 +122,22 @@ export default function JornadaPage() {
   const nomeCostureira = (id: number | null) =>
     id ? costureiras.find((c) => c.id === id)?.nome ?? `#${id}` : "Todas as costureiras";
   const totalSemana = Object.values(jornada).reduce((s, v) => s + (Number(v) || 0), 0);
+  const tabela = useTabela<Ocorrencia>(
+    ocorrencias,
+    [
+      {
+        id: "data",
+        titulo: "Data",
+        valor: (o) => o.data,
+        texto: (o) => `${formatarData(o.data)} ${DIAS_SEMANA[diaSemana(o.data)]}`,
+      },
+      { id: "costureira", titulo: "Costureira", valor: (o) => nomeCostureira(o.costureira_id) },
+      { id: "minutos", titulo: "Minutos", alinhar: "right", valor: (o) => o.minutos },
+      { id: "descricao", titulo: "Descrição", valor: (o) => o.descricao },
+      { id: "acoes", titulo: "", alinhar: "right" },
+    ],
+    { id: "data", direcao: "desc" }
+  );
 
   return (
     <ProducaoLayout titulo="Jornada e Ocorrências" subtitulo="Tempo disponível de trabalho por dia" largura={900}>
@@ -251,17 +268,9 @@ export default function JornadaPage() {
         </div>
         <div style={{ overflowX: "auto", marginTop: 10 }}>
           <table style={ui.tabela}>
-            <thead>
-              <tr>
-                <th style={ui.th}>Data</th>
-                <th style={ui.th}>Costureira</th>
-                <th style={{ ...ui.th, textAlign: "right" }}>Minutos</th>
-                <th style={ui.th}>Descrição</th>
-                <th style={ui.th}></th>
-              </tr>
-            </thead>
+            {tabela.thead}
             <tbody>
-              {ocorrencias.map((o) => (
+              {tabela.visiveis.map((o) => (
                 <tr key={o.id}>
                   <td style={ui.td}>
                     {formatarData(o.data)}{" "}
@@ -291,7 +300,8 @@ export default function JornadaPage() {
               ))}
             </tbody>
           </table>
-          {ocorrencias.length === 0 && <p style={ui.vazio}>Nenhuma ocorrência nesse mês.</p>}
+          {tabela.rodape}
+          {tabela.visiveis.length === 0 && <p style={ui.vazio}>Nenhuma ocorrência encontrada.</p>}
         </div>
       </section>
     </ProducaoLayout>

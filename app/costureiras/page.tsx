@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { useTabela } from "@/components/Tabela";
 import { Costureira, DIAS_SEMANA, Jornada, formatarMinutos } from "@/lib/producao";
 
 type Form = { id?: number; nome: string; setor: string; jornadaPropria: boolean; jornada: Jornada; ativa: boolean };
@@ -80,8 +81,23 @@ export default function CostureirasPage() {
   }
 
   const setores = Array.from(new Set(costureiras.map((c) => c.setor).filter(Boolean))) as string[];
-  const visiveis = costureiras.filter((c) => mostrarInativas || c.ativa);
   const totalSemana = (j: Jornada) => Object.values(j).reduce((s, v) => s + (Number(v) || 0), 0);
+  const tabela = useTabela<Costureira>(
+    costureiras.filter((c) => mostrarInativas || c.ativa),
+    [
+      { id: "nome", titulo: "Nome", valor: (c) => c.nome },
+      { id: "setor", titulo: "Setor", valor: (c) => c.setor },
+      {
+        id: "jornada",
+        titulo: "Jornada semanal",
+        valor: (c) => totalSemana(c.jornada ?? padrao),
+        texto: (c) => `${formatarMinutos(totalSemana(c.jornada ?? padrao))} ${c.jornada ? "própria" : "padrão"}`,
+      },
+      { id: "acoes", titulo: "", alinhar: "right" },
+    ],
+    { id: "nome", direcao: "asc" }
+  );
+  const visiveis = tabela.visiveis;
 
   return (
     <ProducaoLayout titulo="Costureiras" subtitulo="Cadastro de costureiras, setor e jornada">
@@ -192,14 +208,7 @@ export default function CostureirasPage() {
         </div>
         <div style={{ overflowX: "auto", marginTop: 12 }}>
           <table style={ui.tabela}>
-            <thead>
-              <tr>
-                <th style={ui.th}>Nome</th>
-                <th style={ui.th}>Setor</th>
-                <th style={ui.th}>Jornada semanal</th>
-                <th style={ui.th}></th>
-              </tr>
-            </thead>
+            {tabela.thead}
             <tbody>
               {visiveis.map((c) => (
                 <tr key={c.id} style={{ opacity: c.ativa ? 1 : 0.5 }}>
@@ -223,7 +232,8 @@ export default function CostureirasPage() {
               ))}
             </tbody>
           </table>
-          {visiveis.length === 0 && <p style={ui.vazio}>Nenhuma costureira cadastrada.</p>}
+          {tabela.rodape}
+          {visiveis.length === 0 && <p style={ui.vazio}>Nenhuma costureira encontrada.</p>}
         </div>
       </section>
     </ProducaoLayout>

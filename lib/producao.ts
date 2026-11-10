@@ -10,9 +10,9 @@ export const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", 
 // Tamanhos sugeridos ao marcar uma grade no cadastro de itens (editáveis depois)
 export const GRADES: Record<string, string[]> = {
   Adulto: ["P", "M", "G", "GG"],
-  "Plus Size": ["G1", "G2", "G3", "G4"],
-  Juvenil: ["10", "12", "14", "16"],
-  Infantil: ["1", "2", "4", "6", "8"],
+  "Plus Size": ["48", "50", "52", "54"],
+  Juvenil: ["12", "14", "16"],
+  Infantil: ["4", "6", "8", "10"],
 };
 
 // jornada: chave = dia da semana ("0" = domingo), valor = minutos
