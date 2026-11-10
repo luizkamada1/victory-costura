@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Plus, Printer, Search, Trash2, X } from "lucide-react";
+import { ChevronRight, Printer, Search, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import {
@@ -92,18 +92,17 @@ export default function TicketsPage() {
   const qtdTickets = grupos
     .flatMap(linhasDo)
     .reduce((s, l) => s + (l.quantidade <= 0 ? 0 : pacote > 0 ? Math.ceil(l.quantidade / pacote) : 1), 0);
-  const semCor = grupos.some((g) => totalDo(g) > 0 && !g.cor.trim());
 
   function escolherItem(id: string) {
     setItemId(id);
     const novo = itens.find((i) => String(i.id) === id);
     setParte(novo && novo.partes.length === 1 ? novo.partes[0] : "ambas");
-    // já deixa uma linha para cada cor do item; as que ficarem zeradas não geram ticket
+    // uma linha para cada cor cadastrada no item; as que ficarem zeradas não geram ticket
     setGrupos(novo?.cores.length ? novo.cores.map(novoGrupo) : [novoGrupo("")]);
   }
 
-  function mudarGrupo(chave: number, mudanca: Partial<GrupoCor>) {
-    setGrupos((atual) => atual.map((g) => (g.chave === chave ? { ...g, ...mudanca } : g)));
+  function mudarQuantidade(chave: number, tamanho: string, valor: string) {
+    setGrupos((atual) => atual.map((g) => (g.chave === chave ? { ...g, qtd: { ...g.qtd, [tamanho]: valor } } : g)));
   }
 
   async function gerar(e: React.FormEvent) {
@@ -190,7 +189,7 @@ export default function TicketsPage() {
   );
   idsVisiveis = tabela.visiveis.map((t) => t.id);
 
-  const podeGerar = !!item && !!op.trim() && totalPecas > 0 && sequencia.length > 0 && !semCor;
+  const podeGerar = !!item && !!op.trim() && totalPecas > 0 && sequencia.length > 0;
 
   return (
     <ProducaoLayout titulo="Tickets" subtitulo="Gere os tickets de uma OP. Cada operação vira um cupom destacável com código de barras.">
@@ -253,22 +252,12 @@ export default function TicketsPage() {
                       </th>
                     ))}
                     <th className="direita">Total</th>
-                    <th />
                   </tr>
                 </thead>
                 <tbody>
                   {grupos.map((g) => (
                     <tr key={g.chave}>
-                      <td>
-                        <input
-                          className="entrada"
-                          list="lista-cores"
-                          placeholder="Nome da cor"
-                          aria-label="Cor"
-                          value={g.cor}
-                          onChange={(e) => mudarGrupo(g.chave, { cor: e.target.value })}
-                        />
-                      </td>
+                      <td className="forte">{g.cor || <span className="fraco">Sem cor cadastrada</span>}</td>
                       {tamanhos.map((t, i) => (
                         <td key={i}>
                           <input
@@ -277,40 +266,23 @@ export default function TicketsPage() {
                             className="entrada num qtd"
                             aria-label={`${g.cor || "Cor"}, tamanho ${t}`}
                             value={g.qtd[t] ?? ""}
-                            onChange={(e) => mudarGrupo(g.chave, { qtd: { ...g.qtd, [t]: e.target.value } })}
+                            onChange={(e) => mudarQuantidade(g.chave, t, e.target.value)}
                           />
                         </td>
                       ))}
                       <td className="direita forte">{totalDo(g) || <span className="fraco">0</span>}</td>
-                      <td>
-                        <div className="acoes">
-                          <button
-                            type="button"
-                            className="botao botao-pequeno botao-icone botao-perigo"
-                            aria-label={`Tirar a cor ${g.cor}`}
-                            title="Tirar esta cor"
-                            disabled={grupos.length === 1}
-                            onClick={() => setGrupos((atual) => atual.filter((x) => x.chave !== g.chave))}
-                          >
-                            <X size={14} aria-hidden />
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <datalist id="lista-cores">
-                {item.cores.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
             </div>
+            {!item.cores.length && (
+              <p className="bloco-descricao" style={{ marginTop: 8 }}>
+                Este item não tem cores cadastradas, então os tickets saem sem cor. Cadastre as cores em{" "}
+                <a href="/itens">Itens</a>.
+              </p>
+            )}
             <div className="cores-rodape">
-              <button type="button" className="botao botao-secundario botao-pequeno" onClick={() => setGrupos((a) => [...a, novoGrupo("")])}>
-                <Plus size={14} aria-hidden />
-                Adicionar cor
-              </button>
               <label className="campo" style={{ width: 180 }}>
                 <span>Peças por pacote</span>
                 <input
@@ -324,7 +296,6 @@ export default function TicketsPage() {
                 <small>Opcional</small>
               </label>
             </div>
-            {semCor && <Aviso tipo="alerta">Há quantidade numa linha sem cor. Escreva a cor ou zere a linha.</Aviso>}
           </div>
         )}
 
