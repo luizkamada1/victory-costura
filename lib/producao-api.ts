@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { AJUSTES_PADRAO, AjustesGrade } from "@/lib/producao";
 
 export function respostaErro(err: unknown, status = 500) {
   const message = err instanceof Error
@@ -29,4 +31,17 @@ export function emBlocos<T>(lista: T[], tamanho = 200): T[][] {
   const blocos: T[][] = [];
   for (let i = 0; i < lista.length; i += tamanho) blocos.push(lista.slice(i, i + tamanho));
   return blocos;
+}
+
+// Percentuais de ajuste por grade. Enquanto a tabela ajustes_grade não existir no banco,
+// usa os valores iniciais, para a geração de tickets não parar.
+export async function carregarAjustes(supabase: SupabaseClient): Promise<{ ajustes: AjustesGrade; tabelaExiste: boolean }> {
+  const { data, error } = await supabase.from("ajustes_grade").select("grade, percentual");
+  if (error) {
+    if (error.code === "42P01" || error.code === "PGRST205") return { ajustes: { ...AJUSTES_PADRAO }, tabelaExiste: false };
+    throw error;
+  }
+  const ajustes: AjustesGrade = { ...AJUSTES_PADRAO };
+  for (const row of data ?? []) ajustes[row.grade] = Number(row.percentual);
+  return { ajustes, tabelaExiste: true };
 }

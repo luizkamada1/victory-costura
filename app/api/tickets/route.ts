@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
-import { buscarTodos, emBlocos, respostaErro } from "@/lib/producao-api";
-import { PARTES, Parte } from "@/lib/producao";
+import { buscarTodos, carregarAjustes, emBlocos, respostaErro } from "@/lib/producao-api";
+import { PARTES, Parte, fatorGrade } from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseServer();
     const { data: item, error: erroItem } = await supabase
       .from("itens")
-      .select("id, referencia, nome")
+      .select("id, referencia, nome, grades")
       .eq("id", body.item_id)
       .single();
     if (erroItem) throw erroItem;
@@ -100,6 +100,11 @@ export async function POST(req: NextRequest) {
       .eq("item_id", item.id)
       .order("ordem");
     if (erroVinculos) throw erroVinculos;
+
+    // O tempo cadastrado vale para a grade Adulto; as outras grades aplicam o seu percentual.
+    // O tempo já ajustado fica gravado no ticket, então mudar o percentual depois não altera o histórico.
+    const { ajustes } = await carregarAjustes(supabase);
+    const fator = fatorGrade(item.grades, ajustes);
 
     type OperacaoCadastro = { id: number; nome: string; tempo_minutos: number; maquina: string | null; parte: Parte };
     const sequencia = (vinculos ?? [])
@@ -144,7 +149,7 @@ export async function POST(req: NextRequest) {
       const ordemPorParte: Record<string, number> = {};
       for (const o of sequencia) {
         ordemPorParte[o.parte] = (ordemPorParte[o.parte] ?? 0) + 1;
-        const tempo = Number(o.tempo_minutos);
+        const tempo = Math.round(Number(o.tempo_minutos) * fator * 10000) / 10000;
         linhasOperacoes.push({
           ticket_id: t.id,
           operacao_id: o.id,

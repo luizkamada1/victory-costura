@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, Trash2, X } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
-import { GRADES, Item, NOME_PARTE, Operacao, PARTES, Parte } from "@/lib/producao";
+import { AJUSTES_PADRAO, AjustesGrade, GRADES, Item, NOME_PARTE, Operacao, PARTES, Parte, fatorGrade } from "@/lib/producao";
 
 type Form = {
   id?: number;
@@ -41,6 +41,7 @@ export default function ItensPage() {
   const [form, setForm] = useState<Form | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [ajustes, setAjustes] = useState<AjustesGrade>({ ...AJUSTES_PADRAO });
 
   async function carregar() {
     try {
@@ -53,6 +54,11 @@ export default function ItensPage() {
   }
   useEffect(() => {
     carregar();
+    api<{ ajustes: AjustesGrade }>("/api/ajustes-grade")
+      .then((r) => setAjustes(r.ajustes))
+      .catch(() => {
+        // sem os ajustes, mostra os tempos com os valores iniciais
+      });
   }, []);
 
   const porId = new Map(operacoes.map((o) => [o.id, o]));
@@ -136,7 +142,9 @@ export default function ItensPage() {
     }
   }
 
-  const tempoParte = (ids: number[]) => ids.reduce((s, id) => s + (porId.get(id)?.tempo_minutos ?? 0), 0);
+  // tempos mostrados já com o ajuste da grade do item (o cadastrado é o da grade Adulto)
+  const fatorForm = form ? fatorGrade(form.grades, ajustes) : 1;
+  const tempoParte = (ids: number[]) => ids.reduce((s, id) => s + (porId.get(id)?.tempo_minutos ?? 0), 0) * fatorForm;
   const opsDoItem = (item: Item) => item.operacoes.map((v) => porId.get(v.operacao_id)).filter(Boolean) as Operacao[];
   const tabela = useTabela<Item>(
     itens,
@@ -148,7 +156,7 @@ export default function ItensPage() {
       {
         id: "operacoes",
         titulo: "Operações",
-        valor: (i) => opsDoItem(i).reduce((s, o) => s + o.tempo_minutos, 0),
+        valor: (i) => opsDoItem(i).reduce((s, o) => s + o.tempo_minutos, 0) * fatorGrade(i.grades, ajustes),
         texto: (i) => i.partes.map((p) => NOME_PARTE[p]).join(" "),
       },
       { id: "acoes", titulo: "", alinhar: "right", ordenavel: false, filtravel: false },
@@ -257,7 +265,10 @@ export default function ItensPage() {
                 <div key={parte} className="sequencia">
                   <div className="sequencia-cabecalho">
                     <h3>{NOME_PARTE[parte]}</h3>
-                    <span className="num fraco">{min(tempoParte(seq))} min por peça</span>
+                    <span className="num fraco">
+                      {min(tempoParte(seq))} min por peça
+                      {fatorForm !== 1 && ` (${form.grades[0]} ${fatorForm > 1 ? "+" : ""}${Math.round((fatorForm - 1) * 1000) / 10}%)`}
+                    </span>
                   </div>
                   {seq.length === 0 ? (
                     <p className="fraco" style={{ fontSize: 13, margin: "10px 0" }}>
@@ -274,7 +285,7 @@ export default function ItensPage() {
                               <strong>{op?.nome}</strong>
                               <span className="fraco">{op?.maquina ?? "sem máquina"}</span>
                             </span>
-                            <span className="num direita">{op ? min(op.tempo_minutos) : "—"}</span>
+                            <span className="num direita">{op ? min(op.tempo_minutos * fatorForm) : "—"}</span>
                             <span className="acoes">
                               <button
                                 type="button"
@@ -328,7 +339,7 @@ export default function ItensPage() {
                     <option value="">Adicionar operação…</option>
                     {disponiveis.map((o) => (
                       <option key={o.id} value={o.id}>
-                        {o.nome} ({o.maquina ?? "sem máquina"}, {min(o.tempo_minutos)} min)
+                        {o.nome} ({o.maquina ?? "sem máquina"}, {min(o.tempo_minutos * fatorForm)} min)
                       </option>
                     ))}
                   </select>
@@ -391,7 +402,7 @@ export default function ItensPage() {
                               {linha.tem ? (
                                 <>
                                   <span>{linha.lista.length} op.</span>
-                                  <span>{min(linha.lista.reduce((s, o) => s + o.tempo_minutos, 0))} min</span>
+                                  <span>{min(linha.lista.reduce((s, o) => s + o.tempo_minutos, 0) * fatorGrade(item.grades, ajustes))} min</span>
                                 </>
                               ) : (
                                 <>

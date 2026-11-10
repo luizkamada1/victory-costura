@@ -5,6 +5,8 @@ import { ChevronRight, Printer, Search, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import {
+  AJUSTES_PADRAO,
+  AjustesGrade,
   Costureira,
   Item,
   NOME_PARTE,
@@ -14,6 +16,7 @@ import {
   Ticket,
   TicketOperacao,
   codigoBarras,
+  fatorGrade,
   formatarData,
 } from "@/lib/producao";
 
@@ -32,6 +35,7 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
+  const [ajustes, setAjustes] = useState<AjustesGrade>({ ...AJUSTES_PADRAO });
 
   // formulário de geração
   const [op, setOp] = useState("");
@@ -57,6 +61,8 @@ export default function TicketsPage() {
         setItens(i.itens);
         setOperacoes(o.operacoes);
         setCostureiras(c.costureiras);
+        const a = await api<{ ajustes: AjustesGrade }>("/api/ajustes-grade").catch(() => null);
+        if (a) setAjustes(a.ajustes);
       } catch (e) {
         setErro(mensagemErro(e));
       }
@@ -81,7 +87,8 @@ export default function TicketsPage() {
   const sequencia = (item?.operacoes ?? [])
     .map((v) => opPorId.get(v.operacao_id))
     .filter((o): o is Operacao => !!o && partesEscolhidas.includes(o.parte));
-  const tempoPeca = sequencia.reduce((s, o) => s + o.tempo_minutos, 0);
+  // mesmo cálculo do servidor: tempo cadastrado (grade Adulto) × ajuste da grade do item
+  const tempoPeca = sequencia.reduce((s, o) => s + o.tempo_minutos, 0) * fatorGrade(item?.grades, ajustes);
 
   // Sem tamanhos cadastrados, a grade tem uma coluna só, com o tamanho digitado à mão
   const tamanhos = item?.tamanhos.length ? item.tamanhos : [tamanhoLivre];

@@ -4,18 +4,20 @@ import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
-import { NOME_PARTE, Operacao, PARTES, Parte } from "@/lib/producao";
+import { AJUSTES_PADRAO, AjustesGrade, GRADES, NOME_PARTE, Operacao, PARTES, Parte, fatorGrade } from "@/lib/producao";
 
 type Form = { id?: number; nome: string; tempo_minutos: string; maquina: string; parte: Parte };
 const VAZIO: Form = { nome: "", tempo_minutos: "", maquina: "", parte: "superior" };
 
-const tempoTexto = (t: number) => t.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+// 3 casas fixas: os tempos ajustados por grade (ex: 0,495) alinham pela vírgula com os cadastrados
+const tempoTexto = (t: number) => t.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 export default function OperacoesPage() {
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [form, setForm] = useState<Form>(VAZIO);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [ajustes, setAjustes] = useState<AjustesGrade>({ ...AJUSTES_PADRAO });
 
   async function carregar() {
     try {
@@ -27,6 +29,9 @@ export default function OperacoesPage() {
   }
   useEffect(() => {
     carregar();
+    api<{ ajustes: AjustesGrade }>("/api/ajustes-grade")
+      .then((r) => setAjustes(r.ajustes))
+      .catch((e) => setErro(mensagemErro(e)));
   }, []);
 
   async function salvar(e: React.FormEvent) {
@@ -81,7 +86,7 @@ export default function OperacoesPage() {
         <div className="bloco-cabecalho">
           <div>
             <h2>{form.id ? `Editar "${form.nome}"` : "Nova operação"}</h2>
-            <p className="bloco-descricao">O tempo é para fazer a operação em uma peça, em minutos (ex: 0,45).</p>
+            <p className="bloco-descricao">O tempo é para fazer a operação em uma peça da grade Adulto, em minutos (ex: 0,45).</p>
           </div>
         </div>
         <div className="campos grade-operacao">
@@ -90,7 +95,7 @@ export default function OperacoesPage() {
             <input className="entrada" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
           </label>
           <label className="campo">
-            <span>Tempo por peça (min)</span>
+            <span>Tempo Adulto (min)</span>
             <input
               className="entrada num"
               inputMode="decimal"
@@ -137,8 +142,11 @@ export default function OperacoesPage() {
         </div>
       </form>
 
+      <AjustesPorGrade ajustes={ajustes} onSalvo={setAjustes} />
+
       {PARTES.map((parte) => (
         <TabelaParte
+          ajustes={ajustes}
           key={parte}
           parte={parte}
           operacoes={operacoes.filter((o) => o.parte === parte)}
@@ -152,6 +160,7 @@ export default function OperacoesPage() {
 }
 
 function TabelaParte({
+  ajustes,
   parte,
   operacoes,
   editandoId,
@@ -160,6 +169,7 @@ function TabelaParte({
 }: {
   parte: Parte;
   operacoes: Operacao[];
+  ajustes: AjustesGrade;
   editandoId?: number;
   onEditar: (o: Operacao) => void;
   onExcluir: (o: Operacao) => void;
@@ -168,9 +178,17 @@ function TabelaParte({
     operacoes,
     [
       // larguras fixas para as colunas das duas partes ficarem alinhadas uma sob a outra
-      { id: "nome", titulo: "Operação", largura: "42%", valor: (o) => o.nome },
-      { id: "maquina", titulo: "Máquina", largura: "26%", valor: (o) => o.maquina },
-      { id: "tempo", titulo: "Tempo por peça (min)", largura: "16%", alinhar: "right", valor: (o) => o.tempo_minutos, texto: (o) => tempoTexto(o.tempo_minutos) },
+      { id: "nome", titulo: "Operação", largura: "28%", valor: (o) => o.nome },
+      { id: "maquina", titulo: "Máquina", largura: "16%", valor: (o) => o.maquina },
+      // tempo de uma peça em cada grade; o cadastrado é o da Adulto
+      ...Object.keys(GRADES).map((g) => ({
+        id: `tempo-${g}`,
+        titulo: g,
+        largura: "10%",
+        alinhar: "right" as const,
+        valor: (o: Operacao) => o.tempo_minutos * fatorGrade([g], ajustes),
+        texto: (o: Operacao) => tempoTexto(o.tempo_minutos * fatorGrade([g], ajustes)),
+      })),
       { id: "acoes", titulo: "", alinhar: "right", ordenavel: false, filtravel: false },
     ],
     { id: "nome", direcao: "asc" }
@@ -198,7 +216,11 @@ function TabelaParte({
                 <tr key={o.id} data-selecionada={editandoId === o.id}>
                   <td className="forte">{o.nome}</td>
                   <td>{o.maquina ?? <span className="fraco">—</span>}</td>
-                  <td className="direita">{tempoTexto(o.tempo_minutos)}</td>
+                  {Object.keys(GRADES).map((g) => (
+                    <td key={g} className={g === "Adulto" ? "direita forte" : "direita fraco"}>
+                      {tempoTexto(o.tempo_minutos * fatorGrade([g], ajustes))}
+                    </td>
+                  ))}
                   <td>
                     <div className="acoes">
                       <button type="button" className="botao botao-pequeno botao-fantasma" onClick={() => onEditar(o)}>
@@ -224,5 +246,74 @@ function TabelaParte({
         </div>
       )}
     </section>
+  );
+}
+
+// Percentual sobre o tempo cadastrado (grade Adulto) aplicado a cada grade ao gerar tickets
+function AjustesPorGrade({ ajustes, onSalvo }: { ajustes: AjustesGrade; onSalvo: (a: AjustesGrade) => void }) {
+  const [valores, setValores] = useState<Record<string, string>>({});
+  const [salvando, setSalvando] = useState(false);
+  const [retorno, setRetorno] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+
+  useEffect(() => {
+    setValores(Object.fromEntries(Object.keys(GRADES).map((g) => [g, String(ajustes[g] ?? 0).replace(".", ",")])));
+  }, [ajustes]);
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
+    setSalvando(true);
+    setRetorno(null);
+    const novos: AjustesGrade = Object.fromEntries(
+      Object.keys(GRADES).map((g) => [g, Number((valores[g] ?? "0").replace(",", ".")) || 0])
+    );
+    try {
+      await api("/api/ajustes-grade", { method: "POST", body: JSON.stringify({ ajustes: novos }) });
+      onSalvo(novos);
+      setRetorno({ tipo: "ok", texto: "Ajustes salvos. Valem para os próximos tickets gerados." });
+    } catch (err) {
+      setRetorno({ tipo: "erro", texto: mensagemErro(err) });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <form className="bloco" onSubmit={salvar}>
+      <div className="bloco-cabecalho">
+        <div>
+          <h2>Ajuste de tempo por grade</h2>
+          <p className="bloco-descricao">
+            O tempo cadastrado vale para a grade Adulto. As outras grades somam ou tiram este percentual ao gerar os
+            tickets. Tickets já gerados não mudam.
+          </p>
+        </div>
+        <button type="submit" className="botao botao-primario" disabled={salvando}>
+          {salvando ? "Salvando…" : "Salvar ajustes"}
+        </button>
+      </div>
+      <div className="campos grade-ajustes">
+        {Object.keys(GRADES).map((g) => (
+          <label key={g} className="campo">
+            <span>{g}</span>
+            <div className="entrada-sufixo">
+              <input
+                className="entrada num"
+                inputMode="decimal"
+                disabled={g === "Adulto"}
+                value={g === "Adulto" ? "0" : valores[g] ?? ""}
+                onChange={(e) => setValores({ ...valores, [g]: e.target.value })}
+              />
+              <span>%</span>
+            </div>
+            <small>{g === "Adulto" ? "Base: o tempo cadastrado" : "Use - para diminuir (ex: -5)"}</small>
+          </label>
+        ))}
+      </div>
+      {retorno && (
+        <div style={{ marginTop: 12 }}>
+          <Aviso tipo={retorno.tipo}>{retorno.texto}</Aviso>
+        </div>
+      )}
+    </form>
   );
 }

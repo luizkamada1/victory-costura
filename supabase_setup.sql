@@ -101,3 +101,15 @@ create table if not exists ocorrencias (
   created_at timestamptz default now()
 );
 create index if not exists idx_ocorrencias_data on ocorrencias (data);
+
+-- Ajuste do tempo das operações por grade, em % sobre o tempo cadastrado (que vale
+-- para a grade Adulto). Ex: Plus Size +10 = tempo × 1,10; Infantil -10 = tempo × 0,90.
+-- O ajuste é aplicado ao gerar os tickets e fica gravado no ticket.
+create table if not exists ajustes_grade (
+  grade text primary key,
+  percentual numeric(6,2) not null default 0
+);
+insert into ajustes_grade (grade, percentual) values
+  ('Adulto', 0), ('Plus Size', 10), ('Juvenil', -5), ('Infantil', -10)
+on conflict (grade) do nothing;
+alter table ajustes_grade enable row level security;

@@ -1447,3 +1447,31 @@ input[type="checkbox"] {
     gap: 0;
   }
 }
+
+/* operações: ajuste de tempo por grade */
+.grade-ajustes {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.entrada-sufixo {
+  position: relative;
+}
+
+.entrada-sufixo .entrada {
+  padding-right: 30px;
+}
+
+.entrada-sufixo > span {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--tinta-3);
+  pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .grade-ajustes {
+    grid-template-columns: 1fr 1fr;
+  }
+}

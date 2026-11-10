@@ -15,6 +15,18 @@ export const GRADES: Record<string, string[]> = {
   Infantil: ["4", "6", "8", "10"],
 };
 
+// Ajuste do tempo por grade, em % sobre o tempo cadastrado (que vale para a grade Adulto).
+// Estes são os valores iniciais; a fábrica muda em Operações → Ajuste de tempo por grade.
+export type AjustesGrade = Record<string, number>;
+export const AJUSTES_PADRAO: AjustesGrade = { Adulto: 0, "Plus Size": 10, Juvenil: -5, Infantil: -10 };
+
+// Multiplicador do tempo para a grade do item (um item tem uma grade só; sem grade = 1)
+export function fatorGrade(grades: string[] | undefined, ajustes: AjustesGrade) {
+  const grade = grades?.[0];
+  if (!grade) return 1;
+  return 1 + (Number(ajustes[grade] ?? 0) || 0) / 100;
+}
+
 // jornada: chave = dia da semana ("0" = domingo), valor = minutos
 export type Jornada = Record<string, number>;
 
