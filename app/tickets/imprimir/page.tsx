@@ -84,10 +84,13 @@ function Cabecalho({ t }: { t: Ticket }) {
 }
 
 // Estimativa da altura de cada parte na folha, em mm, para decidir quantas linhas cabem.
-// Folha A4 (297mm) menos as margens de 8mm em cima e embaixo.
-const ALTURA_UTIL = 281;
-const ALTURA_FIXA = 34; // cabeçalho + título da parte + respiro da célula
-const ALTURA_CUPOM = 14.5; // o cupom tem 14mm; a folga cobre nomes de operação em duas linhas
+// Medidas reais do layout, em mm. Folha A4 (297mm) menos as margens de 5mm em cima e embaixo.
+const ALTURA_UTIL = 287;
+const ALTURA_FIXA = 30.5; // cabeçalho + título da parte + respiro da célula
+const ALTURA_CUPOM = 14;
+const ALTURA_CUPOM_NOME_LONGO = 16; // nome da operação que quebra em duas linhas
+const alturaParte = (ops: TicketOperacao[]) =>
+  ALTURA_FIXA + ops.reduce((s, o) => s + (o.nome_operacao.length > 26 ? ALTURA_CUPOM_NOME_LONGO : ALTURA_CUPOM), 0);
 
 type Bloco = { chave: string; t: Ticket; parte: (typeof PARTES)[number]; ops: TicketOperacao[] };
 
@@ -111,7 +114,7 @@ function montarFolhas(tickets: Ticket[]): Bloco[][][] {
   let atual: Bloco[][] = [];
   let usado = 0;
   for (const linha of linhas) {
-    const altura = ALTURA_FIXA + Math.max(...linha.map((b) => b.ops.length)) * ALTURA_CUPOM;
+    const altura = Math.max(...linha.map((b) => alturaParte(b.ops)));
     if (atual.length && usado + altura > ALTURA_UTIL) {
       folhas.push(atual);
       atual = [];
@@ -192,9 +195,9 @@ export default function ImprimirTicketsPage() {
           font-weight: 600; }
         /* folha A4: 2 colunas; cada parte ocupa cerca de 1/4 da folha */
         .folha { display: grid; grid-template-columns: 1fr 1fr; align-content: start; background: #fff;
-          width: 210mm; min-height: 297mm; margin: 20px auto; padding: 8mm; box-sizing: border-box;
+          width: 210mm; min-height: 297mm; margin: 20px auto; padding: 5mm; box-sizing: border-box;
           box-shadow: 0 2px 10px rgba(0,0,0,.12); color: #000; }
-        .parte { padding: 4mm; min-width: 0; break-inside: avoid; page-break-inside: avoid; }
+        .parte { padding: 2.5mm 3mm; min-width: 0; break-inside: avoid; page-break-inside: avoid; }
         /* linhas de corte entre as partes */
         .parte:nth-child(2n) { border-left: 1.5px dashed #555; }
         .parte:nth-child(n+3) { border-top: 1.5px dashed #555; }
@@ -221,7 +224,7 @@ export default function ImprimirTicketsPage() {
         .cupom-codigo { flex-shrink: 0; }
         .cupom-codigo svg { display: block; height: 42px; width: auto; }
         @media print {
-          @page { size: A4; margin: 8mm; }
+          @page { size: A4; margin: 5mm; }
           .nao-imprimir { display: none !important; }
           .pagina-impressao { background: #fff; padding: 0; }
           .folha { margin: 0; width: auto; min-height: 0; padding: 0; box-shadow: none; break-after: page; page-break-after: always; }
