@@ -148,7 +148,6 @@ export default function ItensPage() {
       {
         id: "operacoes",
         titulo: "Operações",
-        alinhar: "right",
         valor: (i) => opsDoItem(i).reduce((s, o) => s + o.tempo_minutos, 0),
         texto: (i) => i.partes.map((p) => NOME_PARTE[p]).join(" "),
       },
@@ -383,16 +382,26 @@ export default function ItensPage() {
                         </div>
                       </td>
                       <td style={{ fontSize: 13 }}>{item.cores.join(", ") || <span className="fraco">—</span>}</td>
-                      <td className="direita" style={{ fontSize: 13 }}>
-                        {item.partes.map((p) => {
-                          const daParte = ops.filter((o) => o.parte === p);
-                          return (
-                            <div key={p} className="num">
-                              <span className="fraco">{NOME_PARTE[p].replace("Parte ", "")}</span> {daParte.length} op. ·{" "}
-                              {min(daParte.reduce((s, o) => s + o.tempo_minutos, 0))} min
+                      <td>
+                        <div className="ops-resumo">
+                          {[...PARTES.map((p) => ({ rotulo: NOME_PARTE[p].replace("Parte ", ""), lista: ops.filter((o) => o.parte === p), tem: item.partes.includes(p) })),
+                            { rotulo: "Total", lista: ops, tem: true }].map((linha) => (
+                            <div key={linha.rotulo} className={linha.rotulo === "Total" ? "ops-total" : undefined}>
+                              <span className="fraco">{linha.rotulo}</span>
+                              {linha.tem ? (
+                                <>
+                                  <span>{linha.lista.length} op.</span>
+                                  <span>{min(linha.lista.reduce((s, o) => s + o.tempo_minutos, 0))} min</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="fraco">—</span>
+                                  <span className="fraco">—</span>
+                                </>
+                              )}
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </td>
                       <td>
                         <div className="acoes">
