@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, Trash2, X } from "lucide-react";
+import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import { GRADES, Item, NOME_PARTE, Operacao, PARTES, Parte } from "@/lib/producao";
 
@@ -32,6 +33,8 @@ const separar = (texto: string) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
+const min = (m: number) => m.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export default function ItensPage() {
   const [itens, setItens] = useState<Item[]>([]);
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
@@ -41,10 +44,7 @@ export default function ItensPage() {
 
   async function carregar() {
     try {
-      const [i, o] = await Promise.all([
-        api<{ itens: Item[] }>("/api/itens"),
-        api<{ operacoes: Operacao[] }>("/api/operacoes"),
-      ]);
+      const [i, o] = await Promise.all([api<{ itens: Item[] }>("/api/itens"), api<{ operacoes: Operacao[] }>("/api/operacoes")]);
       setItens(i.itens);
       setOperacoes(o.operacoes);
     } catch (e) {
@@ -102,7 +102,8 @@ export default function ItensPage() {
     setForm({ ...form, sequencia: { ...form.sequencia, [parte]: nova } });
   }
 
-  async function salvar() {
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault();
     if (!form) return;
     setSalvando(true);
     setErro(null);
@@ -130,7 +131,7 @@ export default function ItensPage() {
   }
 
   async function excluir(item: Item) {
-    if (!confirm(`Excluir o item ${item.referencia} — ${item.nome}? Tickets já gerados não são afetados.`)) return;
+    if (!confirm(`Excluir o item ${item.referencia} — ${item.nome}? Tickets já gerados não mudam.`)) return;
     try {
       await api(`/api/itens?id=${item.id}`, { method: "DELETE" });
       await carregar();
@@ -140,54 +141,61 @@ export default function ItensPage() {
   }
 
   const tempoParte = (ids: number[]) => ids.reduce((s, id) => s + (porId.get(id)?.tempo_minutos ?? 0), 0);
-  const opsDoItem = (item: Item) =>
-    item.operacoes.map((v) => porId.get(v.operacao_id)).filter(Boolean) as Operacao[];
+  const opsDoItem = (item: Item) => item.operacoes.map((v) => porId.get(v.operacao_id)).filter(Boolean) as Operacao[];
   const tabela = useTabela<Item>(
     itens,
     [
       { id: "referencia", titulo: "Ref.", valor: (i) => i.referencia },
       { id: "nome", titulo: "Nome", valor: (i) => i.nome },
-      {
-        id: "grade",
-        titulo: "Grade / Tamanhos",
-        valor: (i) => i.grades.join(", "),
-        texto: (i) => `${i.grades.join(", ")} ${i.tamanhos.join(" ")}`,
-      },
+      { id: "grade", titulo: "Grade e tamanhos", valor: (i) => i.grades.join(", "), texto: (i) => `${i.grades.join(", ")} ${i.tamanhos.join(" ")}` },
       { id: "cores", titulo: "Cores", valor: (i) => i.cores.join(", ") },
       {
         id: "operacoes",
         titulo: "Operações",
+        alinhar: "right",
         valor: (i) => opsDoItem(i).reduce((s, o) => s + o.tempo_minutos, 0),
         texto: (i) => i.partes.map((p) => NOME_PARTE[p]).join(" "),
       },
-      { id: "acoes", titulo: "", alinhar: "right" },
+      { id: "acoes", titulo: "", alinhar: "right", ordenavel: false, filtravel: false },
     ],
     { id: "referencia", direcao: "asc" }
   );
-  const filtrados = tabela.visiveis;
 
   return (
-    <ProducaoLayout titulo="Itens" subtitulo="Referências, grades, cores e sequência de operações">
-      {erro && <div style={ui.erroBox}>Erro: {erro}</div>}
+    <ProducaoLayout
+      titulo="Itens"
+      subtitulo="Cada referência com sua grade, cores e a sequência de operações de cada parte."
+      acoes={
+        !form && (
+          <button type="button" className="botao botao-primario" onClick={() => setForm({ ...VAZIO })}>
+            <Plus size={16} aria-hidden />
+            Novo item
+          </button>
+        )
+      }
+    >
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
       {form && (
-        <section style={ui.secao}>
-          <h2 style={ui.secaoTitulo}>{form.id ? `Editar item ${form.referencia}` : "Novo item"}</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 3fr", gap: 12, marginTop: 12 }}>
-            <label style={ui.campo}>
-              <span style={ui.label}>Referência</span>
+        <form className="bloco" onSubmit={salvar}>
+          <div className="bloco-cabecalho">
+            <h2>{form.id ? `Editar item ${form.referencia}` : "Novo item"}</h2>
+          </div>
+          <div className="campos grade-item">
+            <label className="campo">
+              <span>Referência</span>
               <input
                 autoFocus
-                style={ui.input}
+                className="entrada num"
                 placeholder="27100"
                 value={form.referencia}
                 onChange={(e) => setForm({ ...form, referencia: e.target.value })}
               />
             </label>
-            <label style={ui.campo}>
-              <span style={ui.label}>Nome</span>
+            <label className="campo">
+              <span>Nome</span>
               <input
-                style={ui.input}
+                className="entrada"
                 placeholder="Pijama canelado tradicional"
                 value={form.nome}
                 onChange={(e) => setForm({ ...form, nome: e.target.value })}
@@ -195,247 +203,226 @@ export default function ItensPage() {
             </label>
           </div>
 
-          <div style={{ marginTop: 14 }}>
-            <span style={ui.label}>Grade</span>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-              {Object.keys(GRADES).map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => alternarGrade(g)}
-                  style={{ ...chip, ...(form.grades.includes(g) ? chipAtivo : {}) }}
-                >
-                  {form.grades.includes(g) ? "✓ " : ""}
-                  {g}
-                </button>
-              ))}
+          <div className="campos grade-2" style={{ marginTop: 14 }}>
+            <div className="campo">
+              <span>Grade</span>
+              <div className="fichas" role="group" aria-label="Grade">
+                {Object.keys(GRADES).map((g) => (
+                  <button key={g} type="button" className="ficha" aria-pressed={form.grades.includes(g)} onClick={() => alternarGrade(g)}>
+                    {form.grades.includes(g) && <Check size={14} aria-hidden />}
+                    {g}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
-            <label style={ui.campo}>
-              <span style={ui.label}>Tamanhos (separados por vírgula)</span>
-              <input
-                style={ui.input}
-                placeholder="P, M, G, GG"
-                value={form.tamanhos}
-                onChange={(e) => setForm({ ...form, tamanhos: e.target.value })}
-              />
+            <div className="campo">
+              <span>Partes do item</span>
+              <div className="fichas" role="group" aria-label="Partes do item">
+                {PARTES.map((p) => (
+                  <button key={p} type="button" className="ficha" aria-pressed={form.partes.includes(p)} onClick={() => alternarParte(p)}>
+                    {form.partes.includes(p) && <Check size={14} aria-hidden />}
+                    {NOME_PARTE[p]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="campo">
+              <span>Tamanhos</span>
+              <input className="entrada" placeholder="P, M, G, GG" value={form.tamanhos} onChange={(e) => setForm({ ...form, tamanhos: e.target.value })} />
+              <small>Separados por vírgula. Marcar uma grade preenche os tamanhos dela.</small>
             </label>
-            <label style={ui.campo}>
-              <span style={ui.label}>Cores (separadas por vírgula)</span>
+            <label className="campo">
+              <span>Cores</span>
               <input
-                style={ui.input}
+                className="entrada"
                 placeholder="Azul, Rosa, Cinza Mescla"
                 value={form.cores}
                 onChange={(e) => setForm({ ...form, cores: e.target.value })}
               />
+              <small>Separadas por vírgula.</small>
             </label>
           </div>
 
-          <div style={{ marginTop: 14 }}>
-            <span style={ui.label}>Partes do item</span>
-            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              {PARTES.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => alternarParte(p)}
-                  style={{ ...chip, ...(form.partes.includes(p) ? chipAtivo : {}) }}
-                >
-                  {form.partes.includes(p) ? "✓ " : ""}
-                  {NOME_PARTE[p]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginTop: 18 }}>
+          <div className="sequencias">
             {form.partes.map((parte) => {
               const seq = form.sequencia[parte];
               const disponiveis = operacoes.filter((o) => o.parte === parte && !seq.includes(o.id));
               return (
-                <div key={parte} style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800 }}>Operações — {NOME_PARTE[parte]}</h3>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>
-                      {tempoParte(seq).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} min/peça
-                    </span>
+                <div key={parte} className="sequencia">
+                  <div className="sequencia-cabecalho">
+                    <h3>{NOME_PARTE[parte]}</h3>
+                    <span className="num fraco">{min(tempoParte(seq))} min por peça</span>
                   </div>
-                  <ol style={{ listStyle: "none", padding: 0, margin: "10px 0" }}>
-                    {seq.map((id, i) => {
-                      const op = porId.get(id);
-                      return (
-                        <li key={id} style={linhaSeq}>
-                          <span style={{ fontWeight: 800, color: "#4338ca", width: 28 }}>{i + 1}º</span>
-                          <span style={{ flex: 1 }}>
-                            <b>{op?.nome}</b>
-                            <span style={{ color: "#6b7280", fontSize: 12 }}>
-                              {" "}
-                              · {op?.maquina ?? "—"} · {op?.tempo_minutos.toLocaleString("pt-BR")} min
+                  {seq.length === 0 ? (
+                    <p className="fraco" style={{ fontSize: 13, margin: "10px 0" }}>
+                      Nenhuma operação na sequência ainda.
+                    </p>
+                  ) : (
+                    <ol className="sequencia-lista">
+                      {seq.map((id, i) => {
+                        const op = porId.get(id);
+                        return (
+                          <li key={id}>
+                            <span className="sequencia-ordem num">{i + 1}ª</span>
+                            <span className="sequencia-nome">
+                              <strong>{op?.nome}</strong>
+                              <span className="fraco">{op?.maquina ?? "sem máquina"}</span>
                             </span>
-                          </span>
-                          <button
-                            type="button"
-                            style={botaoMini}
-                            disabled={i === 0}
-                            onClick={() => {
-                              const n = [...seq];
-                              [n[i - 1], n[i]] = [n[i], n[i - 1]];
-                              mudarSequencia(parte, n);
-                            }}
-                            title="Subir"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            style={botaoMini}
-                            disabled={i === seq.length - 1}
-                            onClick={() => {
-                              const n = [...seq];
-                              [n[i + 1], n[i]] = [n[i], n[i + 1]];
-                              mudarSequencia(parte, n);
-                            }}
-                            title="Descer"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            style={{ ...botaoMini, color: "#991b1b" }}
-                            onClick={() => mudarSequencia(parte, seq.filter((x) => x !== id))}
-                            title="Remover"
-                          >
-                            ×
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                  {seq.length === 0 && <p style={{ ...ui.vazio, paddingTop: 0 }}>Nenhuma operação vinculada.</p>}
+                            <span className="num direita">{op ? min(op.tempo_minutos) : "—"}</span>
+                            <span className="acoes">
+                              <button
+                                type="button"
+                                className="botao botao-pequeno botao-icone botao-fantasma"
+                                disabled={i === 0}
+                                aria-label="Subir"
+                                title="Subir"
+                                onClick={() => {
+                                  const n = [...seq];
+                                  [n[i - 1], n[i]] = [n[i], n[i - 1]];
+                                  mudarSequencia(parte, n);
+                                }}
+                              >
+                                <ArrowUp size={14} aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                className="botao botao-pequeno botao-icone botao-fantasma"
+                                disabled={i === seq.length - 1}
+                                aria-label="Descer"
+                                title="Descer"
+                                onClick={() => {
+                                  const n = [...seq];
+                                  [n[i + 1], n[i]] = [n[i], n[i + 1]];
+                                  mudarSequencia(parte, n);
+                                }}
+                              >
+                                <ArrowDown size={14} aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                className="botao botao-pequeno botao-icone botao-perigo"
+                                aria-label="Tirar da sequência"
+                                title="Tirar da sequência"
+                                onClick={() => mudarSequencia(parte, seq.filter((x) => x !== id))}
+                              >
+                                <X size={14} aria-hidden />
+                              </button>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
                   <select
-                    style={ui.input}
+                    className="entrada"
                     value=""
+                    aria-label={`Adicionar operação à ${NOME_PARTE[parte]}`}
                     onChange={(e) => e.target.value && mudarSequencia(parte, [...seq, Number(e.target.value)])}
                   >
-                    <option value="">+ Adicionar operação…</option>
+                    <option value="">Adicionar operação…</option>
                     {disponiveis.map((o) => (
                       <option key={o.id} value={o.id}>
-                        {o.nome} ({o.maquina ?? "—"}, {o.tempo_minutos.toLocaleString("pt-BR")} min)
+                        {o.nome} ({o.maquina ?? "sem máquina"}, {min(o.tempo_minutos)} min)
                       </option>
                     ))}
                   </select>
                   {operacoes.filter((o) => o.parte === parte).length === 0 && (
-                    <p style={{ fontSize: 12, color: "#6b7280", margin: "6px 0 0" }}>
+                    <small className="fraco" style={{ display: "block", marginTop: 6 }}>
                       Cadastre operações dessa parte em <a href="/operacoes">Operações</a>.
-                    </p>
+                    </small>
                   )}
                 </div>
               );
             })}
           </div>
 
-          <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
-            <button style={ui.botaoPrimario} onClick={salvar} disabled={salvando}>
-              {salvando ? "Salvando..." : "Salvar item"}
+          <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+            <button type="submit" className="botao botao-primario" disabled={salvando}>
+              {salvando ? "Salvando…" : "Salvar item"}
             </button>
-            <button style={ui.botaoSecundario} onClick={() => setForm(null)}>
+            <button type="button" className="botao botao-secundario" onClick={() => setForm(null)}>
               Cancelar
             </button>
           </div>
-        </section>
+        </form>
       )}
 
-      <section style={ui.secao}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <h2 style={ui.secaoTitulo}>
-            Itens <span style={ui.badge}>{itens.length}</span>
+      <section className="bloco">
+        <div className="bloco-cabecalho">
+          <h2>
+            Referências<span className="contagem">{itens.length}</span>
           </h2>
-          <div style={{ display: "flex", gap: 8 }}>
-            {!form && (
-              <button style={ui.botaoPrimario} onClick={() => setForm({ ...VAZIO })}>
-                + Novo item
-              </button>
-            )}
+        </div>
+        {itens.length === 0 ? (
+          <div className="vazio">
+            <strong>Nenhum item cadastrado</strong>
+            Cadastre as operações primeiro; depois monte aqui a sequência de cada referência.
           </div>
-        </div>
-        <div style={{ overflowX: "auto", marginTop: 12 }}>
-          <table style={ui.tabela}>
-            {tabela.thead}
-            <tbody>
-              {filtrados.map((item) => {
-                const ops = item.operacoes.map((v) => porId.get(v.operacao_id)).filter(Boolean) as Operacao[];
-                return (
-                  <tr key={item.id}>
-                    <td style={{ ...ui.td, fontWeight: 800 }}>{item.referencia}</td>
-                    <td style={ui.td}>{item.nome}</td>
-                    <td style={ui.td}>
-                      <div>{item.grades.join(", ") || "—"}</div>
-                      <div style={{ fontSize: 12, color: "#6b7280" }}>{item.tamanhos.join(" · ")}</div>
-                    </td>
-                    <td style={{ ...ui.td, fontSize: 12.5 }}>{item.cores.join(", ") || "—"}</td>
-                    <td style={{ ...ui.td, fontSize: 12.5 }}>
-                      {item.partes.map((p) => {
-                        const daParte = ops.filter((o) => o.parte === p);
-                        return (
-                          <div key={p}>
-                            {NOME_PARTE[p]}: <b>{daParte.length}</b> op. ·{" "}
-                            {daParte.reduce((s, o) => s + o.tempo_minutos, 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} min
-                          </div>
-                        );
-                      })}
-                    </td>
-                    <td style={{ ...ui.td, textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button style={ui.botaoSecundario} onClick={() => editar(item)}>
-                        Editar
-                      </button>{" "}
-                      <button style={ui.botaoSecundario} onClick={() => duplicar(item)} title="Criar novo item a partir deste">
-                        Duplicar
-                      </button>{" "}
-                      <button style={ui.botaoPerigo} onClick={() => excluir(item)}>
-                        Excluir
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {tabela.rodape}
-          {filtrados.length === 0 && <p style={ui.vazio}>Nenhum item encontrado.</p>}
-        </div>
+        ) : (
+          <div className="tabela-caixa">
+            <table className="tabela">
+              {tabela.thead}
+              <tbody>
+                {tabela.visiveis.map((item) => {
+                  const ops = opsDoItem(item);
+                  return (
+                    <tr key={item.id} data-selecionada={form?.id === item.id}>
+                      <td className="forte num">{item.referencia}</td>
+                      <td>{item.nome}</td>
+                      <td>
+                        <div>{item.grades.join(", ") || <span className="fraco">—</span>}</div>
+                        <div className="fraco" style={{ fontSize: 12 }}>
+                          {item.tamanhos.join(" · ")}
+                        </div>
+                      </td>
+                      <td style={{ fontSize: 13 }}>{item.cores.join(", ") || <span className="fraco">—</span>}</td>
+                      <td className="direita" style={{ fontSize: 13 }}>
+                        {item.partes.map((p) => {
+                          const daParte = ops.filter((o) => o.parte === p);
+                          return (
+                            <div key={p} className="num">
+                              <span className="fraco">{NOME_PARTE[p].replace("Parte ", "")}</span> {daParte.length} op. ·{" "}
+                              {min(daParte.reduce((s, o) => s + o.tempo_minutos, 0))} min
+                            </div>
+                          );
+                        })}
+                      </td>
+                      <td>
+                        <div className="acoes">
+                          <button type="button" className="botao botao-pequeno botao-fantasma" onClick={() => editar(item)}>
+                            <Pencil size={14} aria-hidden />
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="botao botao-pequeno botao-icone botao-fantasma"
+                            onClick={() => duplicar(item)}
+                            aria-label="Duplicar"
+                            title="Criar um item novo a partir deste"
+                          >
+                            <Copy size={14} aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            className="botao botao-pequeno botao-icone botao-perigo"
+                            onClick={() => excluir(item)}
+                            aria-label={`Excluir ${item.referencia}`}
+                            title="Excluir"
+                          >
+                            <Trash2 size={14} aria-hidden />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {tabela.rodape}
+            {tabela.visiveis.length === 0 && <div className="vazio">Nenhum item encontrado.</div>}
+          </div>
+        )}
       </section>
     </ProducaoLayout>
   );
 }
-
-const chip: React.CSSProperties = {
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  borderRadius: 999,
-  padding: "6px 14px",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-  color: "#374151",
-};
-const chipAtivo: React.CSSProperties = { background: "#eef2ff", borderColor: "#818cf8", color: "#4338ca" };
-const linhaSeq: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  padding: "6px 8px",
-  borderBottom: "1px solid #f1f2f4",
-  fontSize: 13,
-};
-const botaoMini: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  background: "#fff",
-  borderRadius: 5,
-  width: 26,
-  height: 26,
-  cursor: "pointer",
-  fontSize: 14,
-  lineHeight: 1,
-};

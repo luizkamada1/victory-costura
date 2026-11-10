@@ -1,9 +1,11 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { ChevronRight, Download } from "lucide-react";
+import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
+import { BarraEficiencia, pct } from "@/components/Medidas";
 import { useTabela } from "@/components/Tabela";
-import { DIAS_SEMANA, corEficiencia, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
+import { DIAS_SEMANA, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
 
 type Dia = {
   data: string;
@@ -60,7 +62,7 @@ const PRESETS: [string, string][] = [
   ["mes-passado", "Mês passado"],
 ];
 
-const pct = (ef: number | null) => (ef === null ? "—" : `${(ef * 100).toFixed(1)}%`);
+const minutos = (m: number) => m.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 
 export default function EficienciaPage() {
   const [[inicio, fim], setPeriodo] = useState<[string, string]>(periodo("mes"));
@@ -85,25 +87,13 @@ export default function EficienciaPage() {
     [
       { id: "nome", titulo: "Costureira", valor: (l) => l.nome },
       { id: "setor", titulo: "Setor", valor: (l) => l.setor },
-      {
-        id: "disponivel",
-        titulo: "Disponível",
-        alinhar: "right",
-        valor: (l) => l.disponivel,
-        texto: (l) => formatarMinutos(l.disponivel),
-      },
-      {
-        id: "produzido",
-        titulo: "Produzido",
-        alinhar: "right",
-        valor: (l) => l.produzido,
-        texto: (l) => formatarMinutos(l.produzido),
-      },
-      { id: "tickets", titulo: "Tickets", alinhar: "right", valor: (l) => l.operacoes },
+      { id: "disponivel", titulo: "Disponível", alinhar: "right", valor: (l) => l.disponivel, texto: (l) => formatarMinutos(l.disponivel) },
+      { id: "produzido", titulo: "Produzido", alinhar: "right", valor: (l) => l.produzido, texto: (l) => formatarMinutos(l.produzido) },
+      { id: "cupons", titulo: "Cupons", alinhar: "right", valor: (l) => l.operacoes },
       {
         id: "eficiencia",
         titulo: "Eficiência",
-        largura: 260,
+        largura: "30%",
         // em %, para o filtro aceitar ">80"
         valor: (l) => (l.eficiencia === null ? null : Math.round(l.eficiencia * 1000) / 10),
         texto: (l) => pct(l.eficiencia),
@@ -114,7 +104,7 @@ export default function EficienciaPage() {
   const visiveis = tabela.visiveis;
   const totalDisp = visiveis.reduce((s, l) => s + l.disponivel, 0);
   const totalProd = visiveis.reduce((s, l) => s + l.produzido, 0);
-  const efEquipe = totalDisp > 0 ? totalProd / totalDisp : null;
+  const totalCupons = visiveis.reduce((s, l) => s + l.operacoes, 0);
 
   async function exportar() {
     const XLSX = await import("xlsx");
@@ -123,7 +113,7 @@ export default function EficienciaPage() {
       Setor: l.setor ?? "",
       "Minutos disponíveis": l.disponivel,
       "Minutos produzidos": Math.round(l.produzido * 10) / 10,
-      Operações: l.operacoes,
+      Cupons: l.operacoes,
       "Eficiência (%)": l.eficiencia === null ? "" : Math.round(l.eficiencia * 1000) / 10,
     }));
     const diario = visiveis.flatMap((l) =>
@@ -144,18 +134,26 @@ export default function EficienciaPage() {
   }
 
   return (
-    <ProducaoLayout titulo="Eficiência das Costureiras" subtitulo="Tempo produzido ÷ tempo disponível">
-      {erro && <div style={ui.erroBox}>Erro: {erro}</div>}
+    <ProducaoLayout
+      titulo="Eficiência"
+      subtitulo="Tempo produzido dividido pelo tempo disponível de cada costureira."
+      acoes={
+        <button type="button" className="botao botao-secundario" onClick={exportar} disabled={!visiveis.length}>
+          <Download size={16} aria-hidden />
+          Exportar para Excel
+        </button>
+      }
+    >
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
-      <section style={{ ...ui.secao, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <section className="bloco periodo">
+        <div className="periodo-fichas" role="group" aria-label="Período">
           {PRESETS.map(([id, rotulo]) => (
             <button
               key={id}
-              style={{
-                ...ui.botaoSecundario,
-                ...(preset === id ? { background: "#eef2ff", borderColor: "#818cf8", color: "#4338ca" } : {}),
-              }}
+              type="button"
+              className="ficha"
+              aria-pressed={preset === id}
               onClick={() => {
                 setPreset(id);
                 setPeriodo(periodo(id));
@@ -165,81 +163,112 @@ export default function EficienciaPage() {
             </button>
           ))}
         </div>
-        <label style={ui.campo}>
-          <span style={ui.label}>De</span>
-          <input
-            type="date"
-            style={ui.input}
-            value={inicio}
-            onChange={(e) => {
-              setPreset("");
-              setPeriodo([e.target.value, fim]);
-            }}
-          />
-        </label>
-        <label style={ui.campo}>
-          <span style={ui.label}>Até</span>
-          <input
-            type="date"
-            style={ui.input}
-            value={fim}
-            onChange={(e) => {
-              setPreset("");
-              setPeriodo([inicio, e.target.value]);
-            }}
-          />
-        </label>
-        <button style={{ ...ui.botaoSecundario, marginLeft: "auto" }} onClick={exportar} disabled={!visiveis.length}>
-          Exportar Excel
-        </button>
+        <div className="periodo-datas">
+          <label className="campo">
+            <span>De</span>
+            <input
+              type="date"
+              className="entrada"
+              value={inicio}
+              onChange={(e) => {
+                setPreset("");
+                setPeriodo([e.target.value, fim]);
+              }}
+            />
+          </label>
+          <label className="campo">
+            <span>Até</span>
+            <input
+              type="date"
+              className="entrada"
+              value={fim}
+              onChange={(e) => {
+                setPreset("");
+                setPeriodo([inicio, e.target.value]);
+              }}
+            />
+          </label>
+        </div>
       </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 20 }}>
-        <Cartao rotulo="Eficiência da equipe" valor={pct(efEquipe)} cor={corEficiencia(efEquipe)} />
-        <Cartao rotulo="Tempo produzido" valor={formatarMinutos(totalProd)} detalhe={`${Math.round(totalProd)} min`} />
-        <Cartao rotulo="Tempo disponível" valor={formatarMinutos(totalDisp)} detalhe={`${totalDisp} min`} />
-      </div>
-
-      <section style={ui.secao}>
-        <h2 style={ui.secaoTitulo}>
-          Ranking {carregando && <span style={{ fontSize: 12, color: "#9ca3af", fontWeight: 500 }}>atualizando…</span>}
-        </h2>
-        <p style={ui.secaoDescricao}>
-          Clique numa costureira para ver o detalhe por dia. Os totais acima seguem os filtros da tabela.
-        </p>
-        <div style={{ overflowX: "auto" }}>
-          <table style={ui.tabela}>
+      <section className="bloco" aria-busy={carregando}>
+        <div className="bloco-cabecalho">
+          <div>
+            <h2>Por costureira</h2>
+            <p className="bloco-descricao">
+              Clique numa linha para ver dia a dia. Todas as barras usam a mesma régua; o traço marca 100%.
+            </p>
+          </div>
+          {carregando && <span className="fraco" style={{ fontSize: 12.5 }}>Atualizando…</span>}
+        </div>
+        <div className="tabela-caixa">
+          <table className="tabela">
             {tabela.thead}
             <tbody>
-              {visiveis.map((l) => (
-                <Fragment key={l.id}>
-                  <tr style={{ cursor: "pointer" }} onClick={() => setAberta(aberta === l.id ? null : l.id)}>
-                    <td style={{ ...ui.td, fontWeight: 700 }}>
-                      <span style={{ color: "#9ca3af", marginRight: 6 }}>{aberta === l.id ? "▾" : "▸"}</span>
-                      {l.nome}
-                    </td>
-                    <td style={ui.td}>{l.setor ?? "—"}</td>
-                    <td style={{ ...ui.td, textAlign: "right" }}>{formatarMinutos(l.disponivel)}</td>
-                    <td style={{ ...ui.td, textAlign: "right" }}>{formatarMinutos(l.produzido)}</td>
-                    <td style={{ ...ui.td, textAlign: "right" }}>{l.operacoes}</td>
-                    <td style={ui.td}>
-                      <BarraEficiencia ef={l.eficiencia} />
-                    </td>
-                  </tr>
-                  {aberta === l.id && (
-                    <tr>
-                      <td colSpan={6} style={{ ...ui.td, background: "#fafafa", padding: "8px 16px 14px" }}>
-                        <DetalheDias dias={l.dias} />
-                        {l.dias.length === 0 && <p style={ui.vazio}>Sem jornada nem produção no período.</p>}
+              {visiveis.map((l) => {
+                const aberto = aberta === l.id;
+                return (
+                  <Fragment key={l.id}>
+                    <tr
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setAberta(aberto ? null : l.id)}
+                      data-selecionada={aberto}
+                      aria-expanded={aberto}
+                    >
+                      <td className="forte">
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <ChevronRight
+                            size={15}
+                            aria-hidden
+                            style={{ transform: aberto ? "rotate(90deg)" : "none", transition: "transform 160ms ease-out" }}
+                          />
+                          {l.nome}
+                        </span>
+                      </td>
+                      <td>{l.setor ?? "—"}</td>
+                      <td className="direita">{formatarMinutos(l.disponivel)}</td>
+                      <td className="direita">{formatarMinutos(l.produzido)}</td>
+                      <td className="direita">{l.operacoes}</td>
+                      <td>
+                        <BarraEficiencia ef={l.eficiencia} />
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
+                    {aberto && (
+                      <tr className="detalhe">
+                        <td colSpan={6} style={{ padding: "8px 20px 16px" }}>
+                          {l.dias.length ? (
+                            <DetalheDias dias={l.dias} />
+                          ) : (
+                            <div className="vazio">Sem jornada nem produção neste período.</div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
+            {visiveis.length > 0 && (
+              <tfoot>
+                <tr className="total">
+                  <td colSpan={2}>{tabela.filtrando ? "Total filtrado" : "Total da equipe"}</td>
+                  <td className="direita">{formatarMinutos(totalDisp)}</td>
+                  <td className="direita">{formatarMinutos(totalProd)}</td>
+                  <td className="direita">{totalCupons}</td>
+                  <td>
+                    <BarraEficiencia ef={totalDisp > 0 ? totalProd / totalDisp : null} />
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
           {tabela.rodape}
-          {visiveis.length === 0 && !carregando && <p style={ui.vazio}>Nenhuma costureira encontrada.</p>}
+          {visiveis.length === 0 && !carregando && (
+            <div className="vazio">
+              <strong>Nenhuma costureira neste período</strong>
+              Cadastre costureiras e aponte cupons para ver a eficiência aqui.
+            </div>
+          )}
         </div>
       </section>
     </ProducaoLayout>
@@ -249,27 +278,16 @@ export default function EficienciaPage() {
 function DetalheDias({ dias }: { dias: Dia[] }) {
   const ef = (d: Dia) => (d.disponivel > 0 ? d.produzido / d.disponivel : null);
   const tabela = useTabela<Dia>(dias, [
-    {
-      id: "data",
-      titulo: "Dia",
-      valor: (d) => d.data,
-      texto: (d) => `${formatarData(d.data)} ${DIAS_SEMANA[diaSemana(d.data)]}`,
-    },
+    { id: "data", titulo: "Dia", valor: (d) => d.data, texto: (d) => `${formatarData(d.data)} ${DIAS_SEMANA[diaSemana(d.data)]}` },
     { id: "jornada", titulo: "Jornada", alinhar: "right", valor: (d) => d.jornada },
     { id: "ocorrencias", titulo: "Ocorrências", alinhar: "right", valor: (d) => d.ocorrencias },
     { id: "disponivel", titulo: "Disponível", alinhar: "right", valor: (d) => d.disponivel },
-    {
-      id: "produzido",
-      titulo: "Produzido",
-      alinhar: "right",
-      valor: (d) => d.produzido,
-      texto: (d) => d.produzido.toLocaleString("pt-BR", { maximumFractionDigits: 1 }),
-    },
-    { id: "tickets", titulo: "Tickets", alinhar: "right", valor: (d) => d.operacoes },
+    { id: "produzido", titulo: "Produzido", alinhar: "right", valor: (d) => d.produzido, texto: (d) => minutos(d.produzido) },
+    { id: "cupons", titulo: "Cupons", alinhar: "right", valor: (d) => d.operacoes },
     {
       id: "eficiencia",
       titulo: "Eficiência",
-      largura: 220,
+      largura: "28%",
       valor: (d) => {
         const e = ef(d);
         return e === null ? null : Math.round(e * 1000) / 10;
@@ -279,36 +297,29 @@ function DetalheDias({ dias }: { dias: Dia[] }) {
   ]);
   return (
     <>
-      <table style={{ ...ui.tabela, fontSize: 12.5 }}>
+      <table className="tabela">
         {tabela.thead}
         <tbody>
           {tabela.visiveis.map((d) => (
             <tr key={d.data}>
-              <td style={ui.td}>
-                {formatarData(d.data)}{" "}
-                <span style={{ color: "#9ca3af" }}>{DIAS_SEMANA[diaSemana(d.data)].slice(0, 3)}</span>
+              <td>
+                {formatarData(d.data)} <span className="fraco">{DIAS_SEMANA[diaSemana(d.data)].slice(0, 3)}</span>
               </td>
-              <td style={{ ...ui.td, textAlign: "right" }}>{d.jornada}</td>
+              <td className="direita">{d.jornada}</td>
               <td
-                style={{
-                  ...ui.td,
-                  textAlign: "right",
-                  color: d.ocorrencias < 0 ? "#b91c1c" : d.ocorrencias > 0 ? "#15803d" : "#9ca3af",
-                }}
+                className="direita"
+                style={{ color: d.ocorrencias < 0 ? "var(--erro)" : d.ocorrencias > 0 ? "var(--ok)" : "var(--tinta-3)" }}
               >
-                {d.ocorrencias > 0 ? "+" : ""}
-                {d.ocorrencias || "—"}
+                {d.ocorrencias > 0 ? `+${d.ocorrencias}` : d.ocorrencias || "—"}
               </td>
-              <td style={{ ...ui.td, textAlign: "right" }}>{d.disponivel}</td>
-              <td style={{ ...ui.td, textAlign: "right" }}>
-                {d.produzido.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
-              </td>
-              <td style={{ ...ui.td, textAlign: "right" }}>{d.operacoes}</td>
-              <td style={ui.td}>
+              <td className="direita">{d.disponivel}</td>
+              <td className="direita">{minutos(d.produzido)}</td>
+              <td className="direita">{d.operacoes}</td>
+              <td>
                 {d.disponivel > 0 ? (
                   <BarraEficiencia ef={ef(d)} />
                 ) : (
-                  <span style={{ color: "#b45309", fontSize: 12 }}>produção sem jornada</span>
+                  <span style={{ color: "var(--alerta)", fontSize: 12.5 }}>Produção num dia sem jornada</span>
                 )}
               </td>
             </tr>
@@ -317,31 +328,5 @@ function DetalheDias({ dias }: { dias: Dia[] }) {
       </table>
       {tabela.rodape}
     </>
-  );
-}
-
-function BarraEficiencia({ ef }: { ef: number | null }) {
-  const cor = corEficiencia(ef);
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <div style={{ flex: 1, height: 8, background: "#eef0f3", borderRadius: 4, overflow: "hidden", position: "relative" }}>
-        <div style={{ width: `${Math.min(100, (ef ?? 0) * 100)}%`, height: "100%", background: cor, borderRadius: 4 }} />
-      </div>
-      <span style={{ fontWeight: 800, color: cor, width: 58, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {pct(ef)}
-      </span>
-    </div>
-  );
-}
-
-function Cartao({ rotulo, valor, detalhe, cor }: { rotulo: string; valor: string; detalhe?: string; cor?: string }) {
-  return (
-    <div style={{ ...ui.secao, marginBottom: 0, padding: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>
-        {rotulo}
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: cor ?? "#111827", marginTop: 4 }}>{valor}</div>
-      {detalhe && <div style={{ fontSize: 12, color: "#9ca3af" }}>{detalhe}</div>}
-    </div>
   );
 }

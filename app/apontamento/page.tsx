@@ -1,17 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { ScanBarcode, Undo2 } from "lucide-react";
+import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
+import { FaixaJornada } from "@/components/Medidas";
 import { useTabela } from "@/components/Tabela";
-import {
-  Costureira,
-  NOME_PARTE,
-  Parte,
-  codigoBarras,
-  corEficiencia,
-  formatarMinutos,
-  hojeISO,
-} from "@/lib/producao";
+import { Costureira, NOME_PARTE, Parte, codigoBarras, hojeISO } from "@/lib/producao";
 
 type Apontamento = {
   id: number;
@@ -26,9 +20,9 @@ type Apontamento = {
 };
 
 type Resumo = { disponivel: number; produzido: number; eficiencia: number | null };
-type Aviso = { tipo: "ok" | "erro"; texto: string };
+type Retorno = { tipo: "ok" | "erro"; texto: string };
 
-// Bipe curto para o operador saber o resultado sem olhar a tela
+// Bipe curto para a líder saber o resultado sem olhar a tela
 function bipe(ok: boolean) {
   try {
     const ctx = new AudioContext();
@@ -46,6 +40,8 @@ function bipe(ok: boolean) {
   }
 }
 
+const minutos = (m: number) => m.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+
 export default function ApontamentoPage() {
   const [costureiras, setCostureiras] = useState<Costureira[]>([]);
   const [costureiraId, setCostureiraId] = useState("");
@@ -53,14 +49,15 @@ export default function ApontamentoPage() {
   const [codigo, setCodigo] = useState("");
   const [apontamentos, setApontamentos] = useState<Apontamento[]>([]);
   const [resumo, setResumo] = useState<Resumo | null>(null);
-  const [aviso, setAviso] = useState<Aviso | null>(null);
+  const [retorno, setRetorno] = useState<Retorno | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [novaId, setNovaId] = useState<number | null>(null);
   const campo = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api<{ costureiras: Costureira[] }>("/api/costureiras")
       .then((r) => setCostureiras(r.costureiras.filter((c) => c.ativa)))
-      .catch((e) => setAviso({ tipo: "erro", texto: mensagemErro(e) }));
+      .catch((e) => setRetorno({ tipo: "erro", texto: mensagemErro(e) }));
   }, []);
 
   const carregar = useCallback(async () => {
@@ -77,12 +74,13 @@ export default function ApontamentoPage() {
       setApontamentos(a.apontamentos);
       setResumo(ef.costureiras.find((c) => String(c.id) === costureiraId) ?? null);
     } catch (e) {
-      setAviso({ tipo: "erro", texto: mensagemErro(e) });
+      setRetorno({ tipo: "erro", texto: mensagemErro(e) });
     }
   }, [costureiraId, data]);
 
   useEffect(() => {
     carregar();
+    setNovaId(null);
     campo.current?.focus();
   }, [carregar]);
 
@@ -93,7 +91,7 @@ export default function ApontamentoPage() {
     setCodigo("");
     if (!costureiraId) {
       bipe(false);
-      setAviso({ tipo: "erro", texto: "Selecione a costureira antes de escanear." });
+      setRetorno({ tipo: "erro", texto: "Escolha a costureira antes de escanear." });
       return;
     }
     setEnviando(true);
@@ -104,14 +102,15 @@ export default function ApontamentoPage() {
       });
       const a = r.apontamento;
       bipe(true);
-      setAviso({
+      setNovaId(a.id);
+      setRetorno({
         tipo: "ok",
-        texto: `✓ ${a.nome_operacao} — OP ${a.ticket.op} · Tam ${a.ticket.tamanho ?? "—"} · ${a.quantidade} pç · ${a.minutos_total.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} min`,
+        texto: `${a.nome_operacao} · OP ${a.ticket.op} · Tam ${a.ticket.tamanho ?? "—"} · ${a.quantidade} peças · ${minutos(a.minutos_total)} min`,
       });
       await carregar();
     } catch (err) {
       bipe(false);
-      setAviso({ tipo: "erro", texto: mensagemErro(err) });
+      setRetorno({ tipo: "erro", texto: mensagemErro(err) });
     } finally {
       setEnviando(false);
       campo.current?.focus();
@@ -119,27 +118,25 @@ export default function ApontamentoPage() {
   }
 
   async function desfazer(a: Apontamento) {
-    if (!confirm(`Desfazer o apontamento de "${a.nome_operacao}" (OP ${a.ticket.op})?`)) return;
+    if (!confirm(`Desfazer o apontamento de "${a.nome_operacao}" (OP ${a.ticket.op})? O cupom volta a ficar pendente.`))
+      return;
     try {
       await api(`/api/apontamentos?id=${a.id}`, { method: "DELETE" });
-      setAviso({ tipo: "ok", texto: `Apontamento de "${a.nome_operacao}" desfeito.` });
+      setRetorno({ tipo: "ok", texto: `Apontamento de "${a.nome_operacao}" desfeito. O cupom pode ser escaneado de novo.` });
       await carregar();
     } catch (e) {
-      setAviso({ tipo: "erro", texto: mensagemErro(e) });
+      setRetorno({ tipo: "erro", texto: mensagemErro(e) });
     } finally {
       campo.current?.focus();
     }
   }
 
-  const produzido = apontamentos.reduce((s, a) => s + a.minutos_total, 0);
-  const pecas = apontamentos.reduce((s, a) => s + a.quantidade, 0);
-  const eficiencia = resumo && resumo.disponivel > 0 ? produzido / resumo.disponivel : null;
   const tabela = useTabela<Apontamento>(apontamentos, [
     { id: "codigo", titulo: "Código", valor: (a) => codigoBarras(a.id) },
     { id: "op", titulo: "OP", valor: (a) => a.ticket.op },
     {
       id: "ref",
-      titulo: "Ref / Cor / Tam",
+      titulo: "Ref · Cor · Tam",
       valor: (a) => a.ticket.referencia,
       texto: (a) => `${a.ticket.referencia} ${a.ticket.cor ?? ""} ${a.ticket.tamanho ?? ""}`,
     },
@@ -149,161 +146,139 @@ export default function ApontamentoPage() {
       valor: (a) => a.nome_operacao,
       texto: (a) => `${a.nome_operacao} ${NOME_PARTE[a.parte]} ${a.maquina ?? ""}`,
     },
-    { id: "qtd", titulo: "Qtd", alinhar: "right", valor: (a) => a.quantidade },
-    {
-      id: "minutos",
-      titulo: "Minutos",
-      alinhar: "right",
-      valor: (a) => a.minutos_total,
-      texto: (a) => a.minutos_total.toLocaleString("pt-BR", { maximumFractionDigits: 1 }),
-    },
-    { id: "acoes", titulo: "", alinhar: "right" },
+    { id: "qtd", titulo: "Peças", alinhar: "right", valor: (a) => a.quantidade },
+    { id: "minutos", titulo: "Minutos", alinhar: "right", valor: (a) => a.minutos_total, texto: (a) => minutos(a.minutos_total) },
+    { id: "acoes", titulo: "", alinhar: "right", ordenavel: false, filtravel: false },
   ]);
 
+  const costureira = costureiras.find((c) => String(c.id) === costureiraId);
+  // a faixa cresce na ordem em que os cupons foram lidos
+  const nervuras = [...apontamentos]
+    .sort((a, b) => a.apontado_em.localeCompare(b.apontado_em))
+    .map((a) => ({
+      id: a.id,
+      minutos: a.minutos_total,
+      rotulo: `${a.nome_operacao} · OP ${a.ticket.op} · ${minutos(a.minutos_total)} min`,
+    }));
+
   return (
-    <ProducaoLayout titulo="Apontamento de Produção" subtitulo="Escaneie os tickets que a costureira entregou">
-      <section style={{ ...ui.secao, display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14 }} className="grade-apont">
-        <label style={ui.campo}>
-          <span style={ui.label}>Costureira</span>
-          <select
-            style={{ ...ui.input, fontSize: 17, padding: "10px 12px", fontWeight: 700 }}
-            value={costureiraId}
-            onChange={(e) => {
-              setCostureiraId(e.target.value);
-              setAviso(null);
-            }}
-          >
-            <option value="">Selecione…</option>
-            {costureiras.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-                {c.setor ? ` — ${c.setor}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={ui.campo}>
-          <span style={ui.label}>Data da produção</span>
-          <input
-            type="date"
-            style={{ ...ui.input, fontSize: 17, padding: "9px 12px" }}
-            value={data}
-            onChange={(e) => setData(e.target.value)}
-          />
-        </label>
-        <form onSubmit={apontar} style={{ gridColumn: "1 / -1" }}>
-          <span style={ui.label}>Código de barras</span>
-          <input
-            ref={campo}
-            style={{
-              ...ui.input,
-              fontSize: 26,
-              padding: "14px 16px",
-              fontFamily: "monospace",
-              letterSpacing: 2,
-              marginTop: 4,
-              borderWidth: 2,
-              borderColor: costureiraId ? "#818cf8" : "#d1d5db",
-            }}
-            placeholder={costureiraId ? "Escaneie o ticket…" : "Selecione a costureira primeiro"}
-            value={codigo}
-            onChange={(e) => setCodigo(e.target.value)}
-            disabled={!costureiraId}
-            autoComplete="off"
-            inputMode="numeric"
-          />
-        </form>
-        {aviso && (
-          <div
-            style={{
-              gridColumn: "1 / -1",
-              ...(aviso.tipo === "ok" ? ui.sucessoBox : ui.erroBox),
-              marginBottom: 0,
-              fontSize: 15,
-              fontWeight: 600,
-            }}
-          >
-            {aviso.texto}
+    <ProducaoLayout titulo="Apontamento" subtitulo="Escaneie os cupons que a costureira entregou no fim do dia.">
+      <section className="bloco">
+        <div className="campos grade-leitor">
+          <label className="campo">
+            <span>Costureira</span>
+            <select
+              className="entrada"
+              value={costureiraId}
+              onChange={(e) => {
+                setCostureiraId(e.target.value);
+                setRetorno(null);
+              }}
+            >
+              <option value="">Escolha quem entregou os cupons</option>
+              {costureiras.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
+                  {c.setor ? ` · ${c.setor}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="campo">
+            <span>Dia da produção</span>
+            <input type="date" className="entrada" value={data} onChange={(e) => setData(e.target.value)} />
+          </label>
+          <form onSubmit={apontar} className="campo leitor">
+            <label htmlFor="codigo-cupom">Código do cupom</label>
+            <div className="leitor-caixa">
+              <ScanBarcode size={22} aria-hidden />
+              <input
+                ref={campo}
+                id="codigo-cupom"
+                className="entrada codigo"
+                placeholder={costureiraId ? "Escaneie ou digite os 8 números" : "Escolha a costureira primeiro"}
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                disabled={!costureiraId}
+                autoComplete="off"
+                inputMode="numeric"
+              />
+            </div>
+          </form>
+        </div>
+        {retorno && (
+          <div style={{ marginTop: 14 }}>
+            <Aviso tipo={retorno.tipo}>
+              <strong>{retorno.tipo === "ok" ? "Cupom apontado" : "Cupom não apontado"}</strong>
+              <div>{retorno.texto}</div>
+            </Aviso>
           </div>
         )}
       </section>
 
-      {costureiraId && (
+      {costureira ? (
         <>
-          <div style={cartoes}>
-            <Cartao rotulo="Tempo produzido" valor={formatarMinutos(produzido)} detalhe={`${Math.round(produzido)} min`} />
-            <Cartao
-              rotulo="Tempo disponível"
-              valor={resumo ? formatarMinutos(resumo.disponivel) : "—"}
-              detalhe={resumo ? `${resumo.disponivel} min` : ""}
-            />
-            <Cartao
-              rotulo="Eficiência do dia"
-              valor={eficiencia === null ? "—" : `${(eficiencia * 100).toFixed(1)}%`}
-              cor={corEficiencia(eficiencia)}
-              detalhe={resumo && resumo.disponivel === 0 ? "dia sem jornada" : ""}
-            />
-            <Cartao rotulo="Tickets / peças" valor={`${apontamentos.length}`} detalhe={`${pecas} peças-operação`} />
-          </div>
-
-          <section style={ui.secao}>
-            <h2 style={ui.secaoTitulo}>Operações apontadas no dia</h2>
-            <div style={{ overflowX: "auto", marginTop: 10 }}>
-              <table style={ui.tabela}>
-                {tabela.thead}
-                <tbody>
-                  {tabela.visiveis.map((a) => (
-                    <tr key={a.id}>
-                      <td style={{ ...ui.td, fontFamily: "monospace", color: "#6b7280" }}>{codigoBarras(a.id)}</td>
-                      <td style={{ ...ui.td, fontWeight: 700 }}>{a.ticket.op}</td>
-                      <td style={ui.td}>
-                        {a.ticket.referencia} · {a.ticket.cor ?? "—"} · {a.ticket.tamanho ?? "—"}
-                      </td>
-                      <td style={ui.td}>
-                        <b>{a.nome_operacao}</b>
-                        <div style={{ fontSize: 11.5, color: "#6b7280" }}>
-                          {NOME_PARTE[a.parte]} · {a.ordem}º · {a.maquina ?? "—"}
-                        </div>
-                      </td>
-                      <td style={{ ...ui.td, textAlign: "right" }}>{a.quantidade}</td>
-                      <td style={{ ...ui.td, textAlign: "right", fontWeight: 700 }}>
-                        {a.minutos_total.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
-                      </td>
-                      <td style={{ ...ui.td, textAlign: "right" }}>
-                        <button style={ui.botaoPerigo} onClick={() => desfazer(a)}>
-                          Desfazer
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {tabela.rodape}
-              {apontamentos.length === 0 && <p style={ui.vazio}>Nenhum ticket apontado para essa costureira nesse dia.</p>}
+          <section className="bloco">
+            <div className="bloco-cabecalho">
+              <h2>Jornada de {costureira.nome}</h2>
             </div>
+            <FaixaJornada nervuras={nervuras} disponivel={resumo?.disponivel ?? 0} novaId={novaId} />
+          </section>
+
+          <section className="bloco">
+            <div className="bloco-cabecalho">
+              <h2>
+                Cupons do dia<span className="contagem">{apontamentos.length}</span>
+              </h2>
+            </div>
+            {apontamentos.length === 0 ? (
+              <div className="vazio">
+                <strong>Nenhum cupom apontado neste dia</strong>
+                Escaneie o primeiro cupom. Cada um aparece aqui e soma uma nervura na faixa da jornada.
+              </div>
+            ) : (
+              <div className="tabela-caixa">
+                <table className="tabela">
+                  {tabela.thead}
+                  <tbody>
+                    {tabela.visiveis.map((a) => (
+                      <tr key={a.id} data-selecionada={a.id === novaId}>
+                        <td className="codigo fraco">{codigoBarras(a.id)}</td>
+                        <td className="forte">{a.ticket.op}</td>
+                        <td>
+                          {a.ticket.referencia} · {a.ticket.cor ?? "—"} · {a.ticket.tamanho ?? "—"}
+                        </td>
+                        <td>
+                          <div className="forte">{a.nome_operacao}</div>
+                          <div className="fraco" style={{ fontSize: 12 }}>
+                            {NOME_PARTE[a.parte]} · {a.ordem}ª operação · {a.maquina ?? "sem máquina"}
+                          </div>
+                        </td>
+                        <td className="direita">{a.quantidade}</td>
+                        <td className="direita forte">{minutos(a.minutos_total)}</td>
+                        <td className="direita">
+                          <button type="button" className="botao botao-pequeno botao-fantasma" onClick={() => desfazer(a)}>
+                            <Undo2 size={14} aria-hidden />
+                            Desfazer
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {tabela.rodape}
+              </div>
+            )}
           </section>
         </>
+      ) : (
+        <section className="bloco">
+          <div className="vazio">
+            <strong>Escolha a costureira para começar</strong>
+            Depois é só escanear os cupons, um atrás do outro. O sistema avisa com um bipe se algo der errado.
+          </div>
+        </section>
       )}
-      <style>{`@media (max-width: 640px) { .grade-apont { grid-template-columns: 1fr !important; } }`}</style>
     </ProducaoLayout>
   );
 }
-
-function Cartao({ rotulo, valor, detalhe, cor }: { rotulo: string; valor: string; detalhe?: string; cor?: string }) {
-  return (
-    <div style={{ ...ui.secao, marginBottom: 0, padding: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3 }}>
-        {rotulo}
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: cor ?? "#111827", marginTop: 4 }}>{valor}</div>
-      {detalhe && <div style={{ fontSize: 12, color: "#9ca3af" }}>{detalhe}</div>}
-    </div>
-  );
-}
-
-const cartoes: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-  gap: 14,
-  marginBottom: 20,
-};

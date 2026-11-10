@@ -140,8 +140,8 @@ export function minutosJornada(costureira: Pick<Costureira, "jornada">, padrao: 
 
 // Verde a partir de 85%, amarelo a partir de 65%, vermelho abaixo
 export function corEficiencia(ef: number | null) {
-  if (ef === null) return "#6b7280";
-  if (ef >= 0.85) return "#15803d";
-  if (ef >= 0.65) return "#b45309";
-  return "#b91c1c";
+  if (ef === null) return "var(--tinta-3)";
+  if (ef >= 0.85) return "var(--ok)";
+  if (ef >= 0.65) return "var(--alerta)";
+  return "var(--erro)";
 }

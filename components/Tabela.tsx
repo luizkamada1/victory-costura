@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
-import { ui } from "@/components/Layout";
+import { ArrowDown, ArrowUp, ArrowUpDown, ListFilter, X } from "lucide-react";
 
 type Valor = string | number | null | undefined;
 
@@ -31,10 +31,10 @@ function normalizar(s: string) {
 
 const comparador = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
 
+const vazio = (v: Valor) => v === null || v === undefined || v === "";
+
 function comparar(a: Valor, b: Valor) {
-  const vazioA = a === null || a === undefined || a === "";
-  const vazioB = b === null || b === undefined || b === "";
-  if (vazioA || vazioB) return vazioA === vazioB ? 0 : vazioA ? 1 : -1;
+  if (vazio(a) || vazio(b)) return vazio(a) === vazio(b) ? 0 : vazio(a) ? 1 : -1;
   if (typeof a === "number" && typeof b === "number") return a - b;
   return comparador.compare(String(a), String(b));
 }
@@ -65,12 +65,12 @@ function passaNoFiltro(filtro: string, texto: string, valor: Valor) {
 function textoDe<T>(c: Coluna<T>, linha: T) {
   if (c.texto) return c.texto(linha);
   const v = c.valor?.(linha);
-  return v === null || v === undefined ? "" : String(v);
+  return vazio(v) ? "" : String(v);
 }
 
 /**
  * Ordenação (clique no título: crescente → decrescente → original) e filtro por coluna.
- * Devolve as linhas já filtradas/ordenadas e o <thead> pronto para usar na tabela.
+ * Devolve as linhas já filtradas/ordenadas, o <thead> pronto e o rodapé com a contagem.
  */
 export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Ordem = null) {
   const [ordem, setOrdem] = useState<Ordem>(ordemInicial);
@@ -89,7 +89,6 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
       resultado = [...resultado].sort((a, b) => {
         const va = col.valor!(a);
         const vb = col.valor!(b);
-        const vazio = (v: Valor) => v === null || v === undefined || v === "";
         // vazios sempre no fim, independente da direção
         if (vazio(va) || vazio(vb)) return comparar(va, vb);
         return comparar(va, vb) * fator;
@@ -118,7 +117,6 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
   const filtrosAtivos = Object.values(filtros).filter((v) => v.trim()).length;
 
   function clicarTitulo(c: Coluna<T>) {
-    if (c.ordenavel === false || !c.valor) return;
     setOrdem((atual) => {
       if (!atual || atual.id !== c.id) return { id: c.id, direcao: "asc" };
       if (atual.direcao === "asc") return { id: c.id, direcao: "desc" };
@@ -133,60 +131,52 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
           const ordenavel = c.ordenavel !== false && !!c.valor;
           const ativa = ordem?.id === c.id;
           const ultima = i === colunas.length - 1;
+          const Seta = !ativa ? ArrowUpDown : ordem!.direcao === "asc" ? ArrowUp : ArrowDown;
           return (
             <th
               key={c.id}
-              style={{
-                ...ui.th,
-                textAlign: c.alinhar ?? "left",
-                width: c.largura,
-                cursor: ordenavel ? "pointer" : "default",
-                userSelect: "none",
-                whiteSpace: "nowrap",
-                color: ativa ? "#4338ca" : ui.th.color,
-              }}
-              onClick={() => clicarTitulo(c)}
-              title={ordenavel ? "Clique para ordenar" : undefined}
+              style={{ textAlign: c.alinhar ?? "left", width: c.largura }}
+              aria-sort={ativa ? (ordem!.direcao === "asc" ? "ascending" : "descending") : undefined}
             >
-              {c.titulo}
-              {ordenavel && (
-                <span style={{ marginLeft: 4, opacity: ativa ? 1 : 0.3, fontSize: 10 }}>
-                  {ativa ? (ordem!.direcao === "asc" ? "▲" : "▼") : "↕"}
-                </span>
-              )}
-              {ultima && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMostrarFiltros((v) => !v);
-                  }}
-                  style={{
-                    ...botaoFiltro,
-                    ...(mostrarFiltros || filtrosAtivos ? botaoFiltroAtivo : {}),
-                  }}
-                  title="Filtrar por coluna"
-                >
-                  ⚲ Filtrar{filtrosAtivos ? ` (${filtrosAtivos})` : ""}
-                </button>
-              )}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                {ordenavel ? (
+                  <button type="button" className="ordenar" data-ativo={ativa} onClick={() => clicarTitulo(c)}>
+                    {c.titulo}
+                    <Seta size={13} aria-hidden />
+                  </button>
+                ) : (
+                  c.titulo
+                )}
+                {ultima && (
+                  <button
+                    type="button"
+                    className="botao botao-pequeno botao-secundario"
+                    onClick={() => setMostrarFiltros((v) => !v)}
+                    aria-expanded={mostrarFiltros}
+                    style={filtrosAtivos ? { background: "var(--rosa-claro)", color: "var(--rosa-escuro)" } : undefined}
+                  >
+                    <ListFilter size={14} aria-hidden />
+                    Filtrar{filtrosAtivos ? ` · ${filtrosAtivos}` : ""}
+                  </button>
+                )}
+              </span>
             </th>
           );
         })}
       </tr>
       {mostrarFiltros && (
-        <tr>
-          {colunas.map((c, i) => {
+        <tr className="linha-filtros">
+          {colunas.map((c) => {
             const filtravel = c.filtravel !== false && !!(c.valor || c.texto);
-            const ultima = i === colunas.length - 1;
             const lista = sugestoes[c.id];
             return (
-              <th key={c.id} style={{ padding: "6px 6px 8px", borderBottom: "1px solid #e5e7eb", textAlign: "left" }}>
+              <th key={c.id}>
                 {filtravel && (
                   <>
                     <input
-                      style={inputFiltro}
-                      placeholder="Filtrar…"
+                      className="filtro"
+                      placeholder="Filtrar"
+                      aria-label={`Filtrar ${typeof c.titulo === "string" ? c.titulo : c.id}`}
                       list={lista ? `${prefixo}-${c.id}` : undefined}
                       value={filtros[c.id] ?? ""}
                       onChange={(e) => setFiltros({ ...filtros, [c.id]: e.target.value })}
@@ -200,11 +190,6 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
                     )}
                   </>
                 )}
-                {ultima && filtrosAtivos > 0 && (
-                  <button type="button" style={{ ...botaoFiltro, marginLeft: 0, marginTop: 4 }} onClick={() => setFiltros({})}>
-                    Limpar filtros
-                  </button>
-                )}
               </th>
             );
           })}
@@ -215,36 +200,14 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
 
   const rodape =
     filtrosAtivos > 0 ? (
-      <p style={{ fontSize: 12, color: "#6b7280", margin: "8px 0 0" }}>
+      <div className="tabela-rodape">
         Mostrando {visiveis.length} de {linhas.length}
-      </p>
+        <button type="button" className="botao botao-pequeno botao-fantasma" onClick={() => setFiltros({})}>
+          <X size={14} aria-hidden />
+          Limpar filtros
+        </button>
+      </div>
     ) : null;
 
-  return { visiveis, thead, rodape };
+  return { visiveis, thead, rodape, filtrando: filtrosAtivos > 0 };
 }
-
-const botaoFiltro: React.CSSProperties = {
-  marginLeft: 8,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
-  borderRadius: 5,
-  padding: "2px 7px",
-  fontSize: 11,
-  fontWeight: 700,
-  color: "#6b7280",
-  cursor: "pointer",
-  textTransform: "none",
-  letterSpacing: 0,
-};
-const botaoFiltroAtivo: React.CSSProperties = { background: "#eef2ff", borderColor: "#818cf8", color: "#4338ca" };
-const inputFiltro: React.CSSProperties = {
-  width: "100%",
-  minWidth: 60,
-  boxSizing: "border-box",
-  border: "1px solid #d1d5db",
-  borderRadius: 5,
-  padding: "4px 6px",
-  fontSize: 12,
-  fontWeight: 400,
-  fontFamily: "inherit",
-};

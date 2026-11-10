@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import JsBarcode from "jsbarcode";
+import { ArrowLeft, Printer } from "lucide-react";
 import { api, mensagemErro } from "@/components/Layout";
 import { NOME_PARTE, PARTES, Ticket, TicketOperacao, codigoBarras, formatarData } from "@/lib/producao";
 
@@ -27,7 +28,7 @@ function CodigoDeBarras({ valor }: { valor: string }) {
 function Cupom({ t, o }: { t: Ticket; o: TicketOperacao }) {
   return (
     <div className="cupom">
-      <div className="cupom-ordem">{o.ordem}º</div>
+      <div className="cupom-ordem">{o.ordem}ª</div>
       <div className="cupom-info">
         <div className="cupom-nome">{o.nome_operacao}</div>
         <div className="cupom-maquina">Máquina: {o.maquina ?? "—"}</div>
@@ -55,20 +56,23 @@ function Tickets() {
       .catch((e) => setErro(mensagemErro(e)));
   }, [ids]);
 
-  if (erro) return <p style={{ padding: 24, color: "#991b1b" }}>Erro: {erro}</p>;
-  if (!tickets) return <p style={{ padding: 24 }}>Carregando...</p>;
+  if (erro) return <p style={{ padding: 24, color: "var(--erro)" }}>Não foi possível abrir os tickets: {erro}</p>;
+  if (!tickets) return <p style={{ padding: 24 }}>Carregando os tickets…</p>;
 
   return (
     <>
-      <div className="barra nao-imprimir">
-        <span>
-          {tickets.length} ticket(s) · {tickets.reduce((s, t) => s + t.operacoes.length, 0)} cupons
+      <div className="barra-impressao nao-imprimir">
+        <span className="num">
+          {tickets.length} {tickets.length === 1 ? "ticket" : "tickets"} ·{" "}
+          {tickets.reduce((s, t) => s + t.operacoes.length, 0)} cupons
         </span>
         <div style={{ display: "flex", gap: 8 }}>
-          <a href="/tickets" className="botao-sec">
-            ← Voltar
+          <a href="/tickets" className="botao botao-secundario">
+            <ArrowLeft size={16} aria-hidden />
+            Voltar
           </a>
-          <button onClick={() => window.print()} className="botao">
+          <button type="button" onClick={() => window.print()} className="botao botao-primario">
+            <Printer size={16} aria-hidden />
             Imprimir
           </button>
         </div>
@@ -129,13 +133,11 @@ export default function ImprimirTicketsPage() {
         <Tickets />
       </Suspense>
       <style>{`
-        .pagina-impressao { background: #e5e7eb; min-height: 100vh; padding-bottom: 40px; }
-        .barra { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center;
-          background: #14142b; color: #fff; padding: 12px 24px; font-size: 14px; font-weight: 600; }
-        .botao { background: #6366f1; color: #fff; border: none; border-radius: 8px; padding: 9px 22px; font-size: 14px;
-          font-weight: 700; cursor: pointer; }
-        .botao-sec { color: #fff; text-decoration: none; border: 1px solid rgba(255,255,255,.25); border-radius: 8px;
-          padding: 8px 14px; font-size: 13px; }
+        .pagina-impressao { background: #dcdcd6; min-height: 100vh; padding-bottom: 40px; }
+        .barra-impressao { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between;
+          align-items: center; background: var(--rosa-fundo); color: var(--tinta); border-bottom: 1px solid #f3dfe7;
+          padding: 10px 24px; font-size: 14px;
+          font-weight: 600; }
         .ticket { background: #fff; width: 190mm; margin: 20px auto; padding: 8mm 10mm; box-sizing: border-box;
           box-shadow: 0 2px 10px rgba(0,0,0,.12); color: #000; }
         .cabecalho { display: grid; grid-template-columns: 1.2fr 2fr 1.3fr .9fr 1fr 1fr; border: 2px solid #000; }

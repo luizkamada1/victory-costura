@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { ChevronRight, Printer, Search, Trash2 } from "lucide-react";
+import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import {
   Costureira,
@@ -17,6 +18,8 @@ import {
 } from "@/lib/producao";
 
 type OpcaoParte = "ambas" | Parte;
+
+const min = (m: number) => m.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
 export default function TicketsPage() {
   const [itens, setItens] = useState<Item[]>([]);
@@ -60,9 +63,7 @@ export default function TicketsPage() {
 
   async function carregarTickets(filtroOp: string) {
     try {
-      const r = await api<{ tickets: Ticket[] }>(
-        `/api/tickets${filtroOp.trim() ? `?op=${encodeURIComponent(filtroOp.trim())}` : ""}`
-      );
+      const r = await api<{ tickets: Ticket[] }>(`/api/tickets${filtroOp.trim() ? `?op=${encodeURIComponent(filtroOp.trim())}` : ""}`);
       setTickets(r.tickets);
       setSelecionados(new Set());
     } catch (e) {
@@ -85,10 +86,7 @@ export default function TicketsPage() {
     : [{ tamanho: tamanhoLivre, quantidade: Number(quantidades[""]) || 0 }];
   const totalPecas = linhas.reduce((s, l) => s + l.quantidade, 0);
   const pacote = Number(porPacote) || 0;
-  const qtdTickets = linhas.reduce(
-    (s, l) => s + (l.quantidade <= 0 ? 0 : pacote > 0 ? Math.ceil(l.quantidade / pacote) : 1),
-    0
-  );
+  const qtdTickets = linhas.reduce((s, l) => s + (l.quantidade <= 0 ? 0 : pacote > 0 ? Math.ceil(l.quantidade / pacote) : 1), 0);
 
   function escolherItem(id: string) {
     setItemId(id);
@@ -107,14 +105,7 @@ export default function TicketsPage() {
     try {
       const r = await api<{ ids: number[] }>("/api/tickets", {
         method: "POST",
-        body: JSON.stringify({
-          op,
-          item_id: item?.id,
-          cor,
-          partes: partesEscolhidas,
-          pecas_por_pacote: pacote,
-          linhas,
-        }),
+        body: JSON.stringify({ op, item_id: item?.id, cor, partes: partesEscolhidas, pecas_por_pacote: pacote, linhas }),
       });
       const url = `/tickets/imprimir?ids=${r.ids.join(",")}`;
       if (aba) aba.location.href = url;
@@ -131,7 +122,7 @@ export default function TicketsPage() {
   }
 
   async function excluir(t: Ticket) {
-    if (!confirm(`Excluir o ticket #${t.id} (OP ${t.op}, ${t.tamanho ?? ""})?`)) return;
+    if (!confirm(`Excluir o ticket #${t.id} (OP ${t.op}, tamanho ${t.tamanho ?? "—"})? Os cupons impressos deixam de valer.`)) return;
     try {
       await api(`/api/tickets?id=${t.id}`, { method: "DELETE" });
       await carregarTickets(buscaOp);
@@ -146,6 +137,10 @@ export default function TicketsPage() {
 
   const nomeCostureira = (id: number | null) => costureiras.find((c) => c.id === id)?.nome ?? "—";
   const apontadas = (t: Ticket) => t.operacoes.filter((o) => o.costureira_id).length;
+  const situacao = (t: Ticket) => {
+    const f = apontadas(t);
+    return f === 0 ? "pendente" : f === t.operacoes.length ? "completo" : "em andamento";
+  };
 
   // As linhas visíveis só existem depois do useTabela; o checkbox do título lê esta variável
   // ao renderizar (o que acontece depois desta função terminar), então sempre vê o valor atual.
@@ -158,72 +153,69 @@ export default function TicketsPage() {
         titulo: <MarcarTodos ids={() => idsVisiveis} selecionados={selecionados} onChange={setSelecionados} />,
         ordenavel: false,
         filtravel: false,
+        largura: 36,
       },
       { id: "id", titulo: "Ticket", valor: (t) => t.id, texto: (t) => `#${t.id}` },
       { id: "op", titulo: "OP", valor: (t) => t.op },
       { id: "referencia", titulo: "Ref.", valor: (t) => t.referencia },
       { id: "cor", titulo: "Cor", valor: (t) => t.cor },
       { id: "tamanho", titulo: "Tam.", valor: (t) => t.tamanho },
-      { id: "quantidade", titulo: "Qtd", alinhar: "right", valor: (t) => t.quantidade },
+      { id: "quantidade", titulo: "Peças", alinhar: "right", valor: (t) => t.quantidade },
       {
         id: "apontadas",
-        titulo: "Apontadas",
+        titulo: "Cupons apontados",
         valor: (t) => (t.operacoes.length ? apontadas(t) / t.operacoes.length : 0),
-        texto: (t) => {
-          const f = apontadas(t);
-          return f === 0 ? "pendente" : f === t.operacoes.length ? "completo" : "em andamento";
-        },
+        texto: situacao,
       },
       { id: "criado", titulo: "Gerado em", valor: (t) => t.created_at, texto: (t) => formatarData(t.created_at) },
-      { id: "acoes", titulo: "", alinhar: "right" },
+      { id: "acoes", titulo: "", alinhar: "right", ordenavel: false, filtravel: false },
     ],
     { id: "id", direcao: "desc" }
   );
   idsVisiveis = tabela.visiveis.map((t) => t.id);
 
-  return (
-    <ProducaoLayout titulo="Tickets de Produção" subtitulo="Geração e impressão dos tickets com código de barras">
-      {erro && <div style={ui.erroBox}>Erro: {erro}</div>}
+  const podeGerar = !!item && !!op.trim() && totalPecas > 0 && sequencia.length > 0;
 
-      <form style={ui.secao} onSubmit={gerar}>
-        <h2 style={ui.secaoTitulo}>Gerar tickets</h2>
-        <p style={ui.secaoDescricao}>
-          É gerado um ticket por tamanho. Cada operação do ticket vira um cupom destacável com código de barras próprio.
-        </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
-          <label style={ui.campo}>
-            <span style={ui.label}>OP</span>
-            <input style={ui.input} value={op} onChange={(e) => setOp(e.target.value)} autoFocus />
+  return (
+    <ProducaoLayout titulo="Tickets" subtitulo="Gere os tickets de uma OP. Cada operação vira um cupom destacável com código de barras.">
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      <form className="bloco" onSubmit={gerar}>
+        <div className="bloco-cabecalho">
+          <div>
+            <h2>Gerar tickets</h2>
+            <p className="bloco-descricao">Sai um ticket por tamanho, ou vários se você dividir em pacotes.</p>
+          </div>
+        </div>
+        <div className="campos grade-ticket">
+          <label className="campo">
+            <span>OP</span>
+            <input className="entrada num" value={op} onChange={(e) => setOp(e.target.value)} autoFocus />
           </label>
-          <label style={{ ...ui.campo, gridColumn: "span 2" }}>
-            <span style={ui.label}>Referência</span>
-            <select style={ui.input} value={itemId} onChange={(e) => escolherItem(e.target.value)}>
-              <option value="">Selecione…</option>
+          <label className="campo">
+            <span>Referência</span>
+            <select className="entrada" value={itemId} onChange={(e) => escolherItem(e.target.value)}>
+              <option value="">Escolha o item</option>
               {itens.map((i) => (
                 <option key={i.id} value={i.id}>
-                  {i.referencia} — {i.nome}
+                  {i.referencia} · {i.nome}
                 </option>
               ))}
             </select>
           </label>
-          <label style={ui.campo}>
-            <span style={ui.label}>Cor</span>
-            <input style={ui.input} list="lista-cores" value={cor} onChange={(e) => setCor(e.target.value)} />
+          <label className="campo">
+            <span>Cor</span>
+            <input className="entrada" list="lista-cores" value={cor} onChange={(e) => setCor(e.target.value)} />
             <datalist id="lista-cores">
               {item?.cores.map((c) => (
                 <option key={c} value={c} />
               ))}
             </datalist>
           </label>
-          <label style={ui.campo}>
-            <span style={ui.label}>Parte</span>
-            <select
-              style={ui.input}
-              value={parte}
-              onChange={(e) => setParte(e.target.value as OpcaoParte)}
-              disabled={!item}
-            >
-              {partesItem.length > 1 && <option value="ambas">Ambas</option>}
+          <label className="campo">
+            <span>Parte</span>
+            <select className="entrada" value={parte} onChange={(e) => setParte(e.target.value as OpcaoParte)} disabled={!item}>
+              {partesItem.length !== 1 && <option value="ambas">Superior e inferior</option>}
               {PARTES.filter((p) => partesItem.includes(p)).map((p) => (
                 <option key={p} value={p}>
                   {NOME_PARTE[p]}
@@ -234,18 +226,18 @@ export default function TicketsPage() {
         </div>
 
         {item && (
-          <>
-            <div style={{ marginTop: 16 }}>
-              <span style={ui.label}>Quantidade por tamanho</span>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+          <div className="quantidades">
+            <div className="campo">
+              <span>Peças por tamanho</span>
+              <div className="tamanhos">
                 {tamanhos.length > 0 ? (
                   tamanhos.map((t) => (
-                    <label key={t} style={{ ...ui.campo, width: 90 }}>
-                      <span style={{ ...ui.label, textAlign: "center" }}>{t}</span>
+                    <label key={t} className="tamanho">
+                      <span>{t}</span>
                       <input
                         type="number"
                         min={0}
-                        style={{ ...ui.input, textAlign: "center" }}
+                        className="entrada num"
                         value={quantidades[t] ?? ""}
                         onChange={(e) => setQuantidades({ ...quantidades, [t]: e.target.value })}
                       />
@@ -253,157 +245,195 @@ export default function TicketsPage() {
                   ))
                 ) : (
                   <>
-                    <label style={{ ...ui.campo, width: 120 }}>
-                      <span style={ui.label}>Tamanho</span>
-                      <input style={ui.input} value={tamanhoLivre} onChange={(e) => setTamanhoLivre(e.target.value)} />
+                    <label className="tamanho" style={{ width: 110 }}>
+                      <span>Tamanho</span>
+                      <input className="entrada" value={tamanhoLivre} onChange={(e) => setTamanhoLivre(e.target.value)} />
                     </label>
-                    <label style={{ ...ui.campo, width: 120 }}>
-                      <span style={ui.label}>Quantidade</span>
+                    <label className="tamanho" style={{ width: 110 }}>
+                      <span>Peças</span>
                       <input
                         type="number"
                         min={0}
-                        style={ui.input}
+                        className="entrada num"
                         value={quantidades[""] ?? ""}
                         onChange={(e) => setQuantidades({ "": e.target.value })}
                       />
                     </label>
                   </>
                 )}
-                <label style={{ ...ui.campo, width: 150, marginLeft: "auto" }}>
-                  <span style={ui.label}>Peças por pacote (opcional)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    style={ui.input}
-                    placeholder="sem divisão"
-                    value={porPacote}
-                    onChange={(e) => setPorPacote(e.target.value)}
-                  />
-                </label>
               </div>
             </div>
-
-            <div style={resumo}>
-              <span>
-                <b>{sequencia.length}</b> operações ·{" "}
-                <b>{tempoPeca.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</b> min/peça
-              </span>
-              <span>
-                <b>{totalPecas}</b> peças → <b>{qtdTickets}</b> ticket(s) ·{" "}
-                <b>{Math.round(tempoPeca * totalPecas).toLocaleString("pt-BR")}</b> min de costura
-              </span>
-            </div>
-            {sequencia.length === 0 && (
-              <p style={{ fontSize: 13, color: "#b45309", margin: "8px 0 0" }}>
-                Esse item não tem operações vinculadas para essa parte. Vincule em{" "}
-                <a href="/itens">Itens</a>.
-              </p>
-            )}
-          </>
+            <label className="campo" style={{ width: 180 }}>
+              <span>Peças por pacote</span>
+              <input
+                type="number"
+                min={0}
+                className="entrada num"
+                placeholder="Sem dividir"
+                value={porPacote}
+                onChange={(e) => setPorPacote(e.target.value)}
+              />
+              <small>Opcional</small>
+            </label>
+          </div>
         )}
 
-        <button
-          type="submit"
-          style={{ ...ui.botaoPrimario, marginTop: 16 }}
-          disabled={gerando || !item || !op.trim() || totalPecas <= 0 || sequencia.length === 0}
-        >
-          {gerando ? "Gerando..." : "Gerar e imprimir tickets"}
-        </button>
+        {item && sequencia.length === 0 && (
+          <Aviso tipo="alerta">
+            Este item não tem operações na sequência para essa parte. Monte a sequência em <a href="/itens">Itens</a>.
+          </Aviso>
+        )}
+
+        <div className="gerar-rodape">
+          <button type="submit" className="botao botao-primario" disabled={gerando || !podeGerar}>
+            <Printer size={16} aria-hidden />
+            {gerando ? "Gerando…" : "Gerar e imprimir"}
+          </button>
+          {item && (
+            <span className="num fraco">
+              {sequencia.length} operações · {min(tempoPeca)} min por peça · {totalPecas} peças em {qtdTickets}{" "}
+              {qtdTickets === 1 ? "ticket" : "tickets"} · {Math.round(tempoPeca * totalPecas).toLocaleString("pt-BR")} min de costura
+            </span>
+          )}
+        </div>
       </form>
 
-      <section style={ui.secao}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <h2 style={ui.secaoTitulo}>Tickets gerados</h2>
+      <section className="bloco">
+        <div className="bloco-cabecalho">
+          <h2>
+            Tickets gerados<span className="contagem">{tickets.length}</span>
+          </h2>
           <form
-            style={{ display: "flex", gap: 8 }}
+            style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
             onSubmit={(e) => {
               e.preventDefault();
               carregarTickets(buscaOp);
             }}
           >
+            {selecionados.size > 0 && (
+              <button type="button" className="botao botao-primario" onClick={() => imprimir(Array.from(selecionados))}>
+                <Printer size={16} aria-hidden />
+                Imprimir {selecionados.size}
+              </button>
+            )}
             <input
-              style={{ ...ui.input, width: 180 }}
-              placeholder="Filtrar por OP"
+              className="entrada"
+              style={{ width: 170 }}
+              placeholder="Buscar uma OP"
+              aria-label="Buscar uma OP"
               value={buscaOp}
               onChange={(e) => setBuscaOp(e.target.value)}
             />
-            <button type="submit" style={ui.botaoSecundario}>
+            <button type="submit" className="botao botao-secundario">
+              <Search size={15} aria-hidden />
               Buscar
             </button>
-            {selecionados.size > 0 && (
-              <button type="button" style={ui.botaoPrimario} onClick={() => imprimir(Array.from(selecionados))}>
-                Imprimir {selecionados.size} selecionado(s)
-              </button>
-            )}
           </form>
         </div>
-        <div style={{ overflowX: "auto", marginTop: 12 }}>
-          <table style={ui.tabela}>
-            {tabela.thead}
-            <tbody>
-              {tabela.visiveis.map((t) => {
-                const feitas = apontadas(t);
-                const total = t.operacoes.length;
-                return (
-                  <Fragment key={t.id}>
-                    <tr style={{ cursor: "pointer" }} onClick={() => setAberto(aberto === t.id ? null : t.id)}>
-                      <td style={ui.td} onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selecionados.has(t.id)}
-                          onChange={(e) => {
-                            const s = new Set(selecionados);
-                            if (e.target.checked) s.add(t.id);
-                            else s.delete(t.id);
-                            setSelecionados(s);
-                          }}
-                        />
-                      </td>
-                      <td style={{ ...ui.td, color: "#6b7280" }}>#{t.id}</td>
-                      <td style={{ ...ui.td, fontWeight: 700 }}>{t.op}</td>
-                      <td style={ui.td}>{t.referencia}</td>
-                      <td style={ui.td}>{t.cor ?? "—"}</td>
-                      <td style={ui.td}>{t.tamanho ?? "—"}</td>
-                      <td style={{ ...ui.td, textAlign: "right" }}>{t.quantidade}</td>
-                      <td style={ui.td}>
-                        <div style={barraFundo}>
-                          <div
-                            style={{
-                              ...barra,
-                              width: `${total ? (feitas / total) * 100 : 0}%`,
-                              background: feitas === total && total > 0 ? "#22c55e" : "#818cf8",
+        <p className="bloco-descricao" style={{ margin: "-6px 0 12px" }}>
+          {buscaOp.trim() ? `Tickets da OP ${buscaOp.trim()}.` : "Os 200 tickets mais recentes."} Clique numa linha para ver quem fez cada operação.
+        </p>
+        {tickets.length === 0 ? (
+          <div className="vazio">
+            <strong>Nenhum ticket encontrado</strong>
+            Gere os tickets de uma OP no formulário acima.
+          </div>
+        ) : (
+          <div className="tabela-caixa">
+            <table className="tabela">
+              {tabela.thead}
+              <tbody>
+                {tabela.visiveis.map((t) => {
+                  const feitas = apontadas(t);
+                  const total = t.operacoes.length;
+                  const estaAberto = aberto === t.id;
+                  return (
+                    <Fragment key={t.id}>
+                      <tr
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setAberto(estaAberto ? null : t.id)}
+                        data-selecionada={selecionados.has(t.id) || estaAberto}
+                        aria-expanded={estaAberto}
+                      >
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar ticket ${t.id}`}
+                            checked={selecionados.has(t.id)}
+                            onChange={(e) => {
+                              const s = new Set(selecionados);
+                              if (e.target.checked) s.add(t.id);
+                              else s.delete(t.id);
+                              setSelecionados(s);
                             }}
                           />
-                        </div>
-                        <span style={{ fontSize: 11.5, color: "#6b7280" }}>
-                          {feitas}/{total}
-                        </span>
-                      </td>
-                      <td style={{ ...ui.td, fontSize: 12.5 }}>{formatarData(t.created_at)}</td>
-                      <td style={{ ...ui.td, textAlign: "right", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
-                        <button style={ui.botaoSecundario} onClick={() => imprimir([t.id])}>
-                          Imprimir
-                        </button>{" "}
-                        <button style={ui.botaoPerigo} onClick={() => excluir(t)}>
-                          Excluir
-                        </button>
-                      </td>
-                    </tr>
-                    {aberto === t.id && (
-                      <tr>
-                        <td colSpan={10} style={{ ...ui.td, background: "#fafafa", padding: "10px 16px" }}>
-                          <OperacoesDoTicket operacoes={t.operacoes} nomeCostureira={nomeCostureira} />
+                        </td>
+                        <td className="fraco num">
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <ChevronRight
+                              size={14}
+                              aria-hidden
+                              style={{ transform: estaAberto ? "rotate(90deg)" : "none", transition: "transform 160ms ease-out" }}
+                            />
+                            {t.id}
+                          </span>
+                        </td>
+                        <td className="forte num">{t.op}</td>
+                        <td className="num">{t.referencia}</td>
+                        <td>{t.cor ?? <span className="fraco">—</span>}</td>
+                        <td>{t.tamanho ?? <span className="fraco">—</span>}</td>
+                        <td className="direita">{t.quantidade}</td>
+                        <td>
+                          <div className="progresso">
+                            <div className="barra">
+                              <div
+                                className="barra-preenchida"
+                                style={{
+                                  width: `${total ? (feitas / total) * 100 : 0}%`,
+                                  backgroundColor: feitas === total && total > 0 ? "var(--ok)" : "var(--rosa)",
+                                }}
+                              />
+                            </div>
+                            <span className="num">
+                              {feitas}/{total}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="num">{formatarData(t.created_at)}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <div className="acoes">
+                            <button type="button" className="botao botao-pequeno botao-fantasma" onClick={() => imprimir([t.id])}>
+                              <Printer size={14} aria-hidden />
+                              Imprimir
+                            </button>
+                            <button
+                              type="button"
+                              className="botao botao-pequeno botao-icone botao-perigo"
+                              onClick={() => excluir(t)}
+                              aria-label={`Excluir ticket ${t.id}`}
+                              title="Excluir"
+                            >
+                              <Trash2 size={14} aria-hidden />
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-          {tabela.rodape}
-          {tabela.visiveis.length === 0 && <p style={ui.vazio}>Nenhum ticket encontrado.</p>}
-        </div>
+                      {estaAberto && (
+                        <tr className="detalhe">
+                          <td colSpan={10} style={{ padding: "8px 20px 16px" }}>
+                            <OperacoesDoTicket operacoes={t.operacoes} nomeCostureira={nomeCostureira} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+            {tabela.rodape}
+            {tabela.visiveis.length === 0 && <div className="vazio">Nenhum ticket encontrado.</div>}
+          </div>
+        )}
       </section>
     </ProducaoLayout>
   );
@@ -423,6 +453,7 @@ function MarcarTodos({
   return (
     <input
       type="checkbox"
+      aria-label="Selecionar todos os visíveis"
       title="Selecionar todos os visíveis"
       checked={todos}
       onClick={(e) => e.stopPropagation()}
@@ -442,50 +473,34 @@ function OperacoesDoTicket({
     o.costureira_id ? `${nomeCostureira(o.costureira_id)} · ${formatarData(o.data_producao ?? "")}` : "pendente";
   const tabela = useTabela<TicketOperacao>(operacoes, [
     { id: "parte", titulo: "Parte", valor: (o) => NOME_PARTE[o.parte] },
-    { id: "ordem", titulo: "Ordem", valor: (o) => o.ordem, texto: (o) => `${o.ordem}º` },
+    { id: "ordem", titulo: "Ordem", valor: (o) => o.ordem, texto: (o) => `${o.ordem}ª` },
     { id: "nome", titulo: "Operação", valor: (o) => o.nome_operacao },
     { id: "maquina", titulo: "Máquina", valor: (o) => o.maquina },
     { id: "codigo", titulo: "Código", valor: (o) => codigoBarras(o.id) },
     { id: "situacao", titulo: "Feita por", valor: situacao },
   ]);
-  const celula: React.CSSProperties = { padding: "4px 8px", borderBottom: "1px solid #f1f2f4" };
   return (
-    <table style={{ ...ui.tabela, fontSize: 12.5 }}>
-      {tabela.thead}
-      <tbody>
-        {tabela.visiveis.map((o) => (
-          <tr key={o.id}>
-            <td style={{ ...celula, color: "#6b7280" }}>{NOME_PARTE[o.parte]}</td>
-            <td style={{ ...celula, fontWeight: 700 }}>{o.ordem}º</td>
-            <td style={celula}>{o.nome_operacao}</td>
-            <td style={{ ...celula, color: "#6b7280" }}>{o.maquina ?? "—"}</td>
-            <td style={{ ...celula, fontFamily: "monospace" }}>{codigoBarras(o.id)}</td>
-            <td style={{ ...celula, fontWeight: 600, color: o.costureira_id ? "#15803d" : "#9ca3af" }}>{situacao(o)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <table className="tabela">
+        {tabela.thead}
+        <tbody>
+          {tabela.visiveis.map((o) => (
+            <tr key={o.id}>
+              <td>
+                <span className={`selo selo-${o.parte}`}>{NOME_PARTE[o.parte].replace("Parte ", "")}</span>
+              </td>
+              <td className="forte num">{o.ordem}ª</td>
+              <td>{o.nome_operacao}</td>
+              <td className="fraco">{o.maquina ?? "—"}</td>
+              <td className="codigo fraco">{codigoBarras(o.id)}</td>
+              <td className={o.costureira_id ? "forte" : "fraco"} style={o.costureira_id ? { color: "var(--ok)" } : undefined}>
+                {situacao(o)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {tabela.rodape}
+    </>
   );
 }
-
-const resumo: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  flexWrap: "wrap",
-  gap: 8,
-  marginTop: 16,
-  background: "#f5f7ff",
-  border: "1px solid #e0e7ff",
-  borderRadius: 8,
-  padding: "10px 14px",
-  fontSize: 13,
-  color: "#374151",
-};
-const barraFundo: React.CSSProperties = {
-  width: 80,
-  height: 6,
-  background: "#e5e7eb",
-  borderRadius: 3,
-  overflow: "hidden",
-};
-const barra: React.CSSProperties = { height: "100%", borderRadius: 3 };

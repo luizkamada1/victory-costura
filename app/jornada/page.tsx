@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ProducaoLayout, { api, mensagemErro, ui } from "@/components/Layout";
+import { Plus, Trash2 } from "lucide-react";
+import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import {
   Costureira,
@@ -68,12 +69,13 @@ export default function JornadaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mes]);
 
-  async function salvarJornada() {
+  async function salvarJornada(e: React.FormEvent) {
+    e.preventDefault();
     setErro(null);
     try {
       await api("/api/jornada", { method: "POST", body: JSON.stringify({ jornada }) });
-      setSucesso("Jornada padrão salva.");
-      setTimeout(() => setSucesso(null), 3000);
+      setSucesso("Jornada padrão salva. Vale para todas as costureiras sem jornada própria.");
+      setTimeout(() => setSucesso(null), 4000);
     } catch (e) {
       setErro(mensagemErro(e));
     }
@@ -110,7 +112,7 @@ export default function JornadaPage() {
   }
 
   async function excluirOcorrencia(o: Ocorrencia) {
-    if (!confirm("Excluir essa ocorrência?")) return;
+    if (!confirm(`Excluir a ocorrência de ${formatarData(o.data)}? Os minutos voltam ao normal nesse dia.`)) return;
     try {
       await api(`/api/ocorrencias?id=${o.id}`, { method: "DELETE" });
       await carregarOcorrencias();
@@ -125,74 +127,66 @@ export default function JornadaPage() {
   const tabela = useTabela<Ocorrencia>(
     ocorrencias,
     [
-      {
-        id: "data",
-        titulo: "Data",
-        valor: (o) => o.data,
-        texto: (o) => `${formatarData(o.data)} ${DIAS_SEMANA[diaSemana(o.data)]}`,
-      },
+      { id: "data", titulo: "Dia", valor: (o) => o.data, texto: (o) => `${formatarData(o.data)} ${DIAS_SEMANA[diaSemana(o.data)]}` },
       { id: "costureira", titulo: "Costureira", valor: (o) => nomeCostureira(o.costureira_id) },
       { id: "minutos", titulo: "Minutos", alinhar: "right", valor: (o) => o.minutos },
-      { id: "descricao", titulo: "Descrição", valor: (o) => o.descricao },
-      { id: "acoes", titulo: "", alinhar: "right" },
+      { id: "descricao", titulo: "Motivo", valor: (o) => o.descricao },
+      { id: "acoes", titulo: "", alinhar: "right", ordenavel: false, filtravel: false },
     ],
     { id: "data", direcao: "desc" }
   );
 
   return (
-    <ProducaoLayout titulo="Jornada e Ocorrências" subtitulo="Tempo disponível de trabalho por dia" largura={900}>
-      {erro && <div style={ui.erroBox}>Erro: {erro}</div>}
-      {sucesso && <div style={ui.sucessoBox}>{sucesso}</div>}
+    <ProducaoLayout titulo="Jornada e Ocorrências" subtitulo="Quantos minutos cada costureira tem para trabalhar em cada dia.">
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+      {sucesso && <Aviso tipo="ok">{sucesso}</Aviso>}
 
-      <section style={ui.secao}>
-        <h2 style={ui.secaoTitulo}>Jornada padrão (minutos por dia)</h2>
-        <p style={ui.secaoDescricao}>
-          Vale para todas as costureiras que não têm jornada própria. Total na semana:{" "}
-          <b>{formatarMinutos(totalSemana)}</b> ({totalSemana} min).
-        </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(105px, 1fr))", gap: 10 }}>
+      <form className="bloco" onSubmit={salvarJornada}>
+        <div className="bloco-cabecalho">
+          <div>
+            <h2>Jornada padrão</h2>
+            <p className="bloco-descricao">
+              Minutos por dia da semana. Total: <span className="num">{formatarMinutos(totalSemana)}</span> por semana.
+            </p>
+          </div>
+          <button type="submit" className="botao botao-primario">
+            Salvar jornada
+          </button>
+        </div>
+        <div className="campos grade-dias">
           {DIAS_SEMANA.map((nome, d) => (
-            <label key={d} style={ui.campo}>
-              <span style={ui.label}>{nome}</span>
+            <label key={d} className="campo">
+              <span>{nome}</span>
               <input
                 type="number"
                 min={0}
-                style={ui.input}
+                className="entrada num"
                 value={jornada[String(d)] ?? 0}
                 onChange={(e) => setJornada({ ...jornada, [String(d)]: Number(e.target.value) })}
               />
-              <span style={{ fontSize: 11.5, color: "#6b7280" }}>{formatarMinutos(jornada[String(d)] ?? 0)}</span>
+              <small className="num">{formatarMinutos(jornada[String(d)] ?? 0)}</small>
             </label>
           ))}
         </div>
-        <button style={{ ...ui.botaoPrimario, marginTop: 14 }} onClick={salvarJornada}>
-          Salvar jornada padrão
-        </button>
-      </section>
+      </form>
 
-      <form style={ui.secao} onSubmit={salvarOcorrencia}>
-        <h2 style={ui.secaoTitulo}>Nova ocorrência</h2>
-        <p style={ui.secaoDescricao}>
-          Reduz ou aumenta o tempo disponível de um dia. Ex: falta de luz (reduz), hora extra (aumenta), falta ou
-          saída antecipada (reduz).
-        </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <label style={ui.campo}>
-            <span style={ui.label}>Data</span>
-            <input
-              type="date"
-              style={ui.input}
-              value={form.data}
-              onChange={(e) => setForm({ ...form, data: e.target.value })}
-            />
+      <form className="bloco" onSubmit={salvarOcorrencia}>
+        <div className="bloco-cabecalho">
+          <div>
+            <h2>Nova ocorrência</h2>
+            <p className="bloco-descricao">
+              Tira ou soma minutos num dia: falta de luz e falta tiram, hora extra soma.
+            </p>
+          </div>
+        </div>
+        <div className="campos grade-ocorrencia">
+          <label className="campo">
+            <span>Dia</span>
+            <input type="date" className="entrada" value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} />
           </label>
-          <label style={ui.campo}>
-            <span style={ui.label}>Costureira</span>
-            <select
-              style={ui.input}
-              value={form.costureira_id}
-              onChange={(e) => setForm({ ...form, costureira_id: e.target.value })}
-            >
+          <label className="campo">
+            <span>Costureira</span>
+            <select className="entrada" value={form.costureira_id} onChange={(e) => setForm({ ...form, costureira_id: e.target.value })}>
               <option value="">Todas as costureiras</option>
               {costureiras
                 .filter((c) => c.ativa)
@@ -203,106 +197,119 @@ export default function JornadaPage() {
                 ))}
             </select>
           </label>
-          <label style={ui.campo}>
-            <span style={ui.label}>Tipo</span>
+          <label className="campo">
+            <span>Efeito</span>
             <select
-              style={ui.input}
+              className="entrada"
               value={form.sentido}
               onChange={(e) => setForm({ ...form, sentido: e.target.value as FormOcorrencia["sentido"] })}
             >
-              <option value="reduzir">− Reduz o tempo</option>
-              <option value="aumentar">+ Aumenta o tempo</option>
+              <option value="reduzir">Tira minutos</option>
+              <option value="aumentar">Soma minutos</option>
             </select>
           </label>
-          <label style={ui.campo}>
-            <span style={ui.label}>Minutos</span>
+          <label className="campo">
+            <span>Minutos</span>
             <input
               type="number"
               min={1}
-              style={ui.input}
+              className="entrada num"
               value={form.minutos}
               onChange={(e) => setForm({ ...form, minutos: e.target.value })}
             />
-            <span style={{ fontSize: 11.5, color: "#6b7280" }}>
-              Jornada do dia: {jornadaDoDia} min
+            <small>
+              Jornada do dia: <span className="num">{jornadaDoDia}</span> min
               {jornadaDoDia > 0 && (
                 <>
                   {" · "}
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() =>
                       setForm({
                         ...form,
                         sentido: "reduzir",
                         minutos: String(jornadaDoDia),
                         descricao: form.descricao || (form.costureira_id ? "Falta" : "Sem expediente"),
-                      });
-                    }}
+                      })
+                    }
                   >
                     dia inteiro
-                  </a>
+                  </button>
                 </>
               )}
-            </span>
+            </small>
+          </label>
+          <label className="campo motivo">
+            <span>Motivo</span>
+            <input
+              className="entrada"
+              placeholder="Ex: falta de energia das 14h às 15h30"
+              value={form.descricao}
+              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+            />
           </label>
         </div>
-        <label style={{ ...ui.campo, marginTop: 12 }}>
-          <span style={ui.label}>Descrição</span>
-          <input
-            style={ui.input}
-            placeholder="Ex: Falta de energia das 14h às 15h30"
-            value={form.descricao}
-            onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-          />
-        </label>
-        <button type="submit" style={{ ...ui.botaoPrimario, marginTop: 14 }}>
-          + Registrar ocorrência
+        <button type="submit" className="botao botao-primario" style={{ marginTop: 6 }}>
+          <Plus size={16} aria-hidden />
+          Registrar ocorrência
         </button>
       </form>
 
-      <section style={ui.secao}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <h2 style={ui.secaoTitulo}>Ocorrências do mês</h2>
-          <input type="month" style={{ ...ui.input, width: 170 }} value={mes} onChange={(e) => setMes(e.target.value)} />
+      <section className="bloco">
+        <div className="bloco-cabecalho">
+          <h2>
+            Ocorrências do mês<span className="contagem">{ocorrencias.length}</span>
+          </h2>
+          <input
+            type="month"
+            className="entrada"
+            style={{ width: 170 }}
+            aria-label="Mês"
+            value={mes}
+            onChange={(e) => setMes(e.target.value)}
+          />
         </div>
-        <div style={{ overflowX: "auto", marginTop: 10 }}>
-          <table style={ui.tabela}>
-            {tabela.thead}
-            <tbody>
-              {tabela.visiveis.map((o) => (
-                <tr key={o.id}>
-                  <td style={ui.td}>
-                    {formatarData(o.data)}{" "}
-                    <span style={{ color: "#9ca3af", fontSize: 12 }}>{DIAS_SEMANA[diaSemana(o.data)].slice(0, 3)}</span>
-                  </td>
-                  <td style={{ ...ui.td, fontWeight: o.costureira_id ? 600 : 400, fontStyle: o.costureira_id ? "normal" : "italic" }}>
-                    {nomeCostureira(o.costureira_id)}
-                  </td>
-                  <td
-                    style={{
-                      ...ui.td,
-                      textAlign: "right",
-                      fontWeight: 700,
-                      color: o.minutos < 0 ? "#b91c1c" : "#15803d",
-                    }}
-                  >
-                    {o.minutos > 0 ? "+" : ""}
-                    {o.minutos}
-                  </td>
-                  <td style={ui.td}>{o.descricao ?? "—"}</td>
-                  <td style={{ ...ui.td, textAlign: "right" }}>
-                    <button style={ui.botaoPerigo} onClick={() => excluirOcorrencia(o)}>
-                      Excluir
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {tabela.rodape}
-          {tabela.visiveis.length === 0 && <p style={ui.vazio}>Nenhuma ocorrência encontrada.</p>}
-        </div>
+        {ocorrencias.length === 0 ? (
+          <div className="vazio">
+            <strong>Nenhuma ocorrência neste mês</strong>
+            Todos os dias seguem a jornada normal.
+          </div>
+        ) : (
+          <div className="tabela-caixa">
+            <table className="tabela">
+              {tabela.thead}
+              <tbody>
+                {tabela.visiveis.map((o) => (
+                  <tr key={o.id}>
+                    <td>
+                      {formatarData(o.data)} <span className="fraco">{DIAS_SEMANA[diaSemana(o.data)].slice(0, 3)}</span>
+                    </td>
+                    <td className={o.costureira_id ? "forte" : "fraco"}>{nomeCostureira(o.costureira_id)}</td>
+                    <td className="direita forte" style={{ color: o.minutos < 0 ? "var(--erro)" : "var(--ok)" }}>
+                      {o.minutos > 0 ? `+${o.minutos}` : o.minutos}
+                    </td>
+                    <td>{o.descricao ?? <span className="fraco">—</span>}</td>
+                    <td>
+                      <div className="acoes">
+                        <button
+                          type="button"
+                          className="botao botao-pequeno botao-icone botao-perigo"
+                          onClick={() => excluirOcorrencia(o)}
+                          aria-label="Excluir ocorrência"
+                          title="Excluir"
+                        >
+                          <Trash2 size={14} aria-hidden />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {tabela.rodape}
+          </div>
+        )}
       </section>
     </ProducaoLayout>
   );
