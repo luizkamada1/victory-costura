@@ -11,12 +11,14 @@ function CodigoDeBarras({ valor }: { valor: string }) {
   const ref = useRef<SVGSVGElement>(null);
   useEffect(() => {
     if (ref.current) {
+      // Code 128C: os 8 dígitos viram 4 pares, então o código fica com metade da largura
+      // e cabe na meia folha; os leitores USB comuns leem igual ao Code 128 normal.
       JsBarcode(ref.current, valor, {
-        format: "CODE128",
+        format: valor.length % 2 === 0 ? "CODE128C" : "CODE128",
         width: 2,
-        height: 42,
+        height: 46,
         margin: 0,
-        fontSize: 13,
+        fontSize: 14,
         textMargin: 2,
         font: "monospace",
       });
@@ -39,6 +41,41 @@ function Cupom({ t, o }: { t: Ticket; o: TicketOperacao }) {
       </div>
       <div className="cupom-codigo">
         <CodigoDeBarras valor={codigoBarras(o.id)} />
+      </div>
+    </div>
+  );
+}
+
+// Linha 1: campos curtos (OP até 6, referência 5, tamanho 2, quantidade 4 caracteres).
+// Linha 2: a cor, que pode ser longa, e o número do ticket.
+function Cabecalho({ t }: { t: Ticket }) {
+  return (
+    <div className="cabecalho">
+      <div className="cab-campo">
+        <span>OP</span>
+        <b>{t.op}</b>
+      </div>
+      <div className="cab-campo">
+        <span>Ref.</span>
+        <b>{t.referencia}</b>
+      </div>
+      <div className="cab-campo">
+        <span>Tam.</span>
+        <b>{t.tamanho ?? "—"}</b>
+      </div>
+      <div className="cab-campo">
+        <span>Qtd.</span>
+        <b>{t.quantidade}</b>
+      </div>
+      <div className="cab-campo cab-cor">
+        <span>Cor</span>
+        <b>{t.cor ?? "—"}</b>
+      </div>
+      <div className="cab-campo cab-id">
+        <span>Ticket</span>
+        <b>
+          #{t.id} <small>{formatarData(t.created_at)}</small>
+        </b>
       </div>
     </div>
   );
@@ -78,50 +115,26 @@ function Tickets() {
         </div>
       </div>
 
-      {tickets.map((t) => (
-        <div key={t.id} className="ticket">
-          <div className="cabecalho">
-            <div className="cab-campo cab-op">
-              <span>OP</span>
-              <b>{t.op}</b>
-            </div>
-            <div className="cab-campo">
-              <span>Referência</span>
-              <b>{t.referencia}</b>
-              <small>{t.nome_item}</small>
-            </div>
-            <div className="cab-campo">
-              <span>Cor</span>
-              <b>{t.cor ?? "—"}</b>
-            </div>
-            <div className="cab-campo">
-              <span>Tamanho</span>
-              <b>{t.tamanho ?? "—"}</b>
-            </div>
-            <div className="cab-campo">
-              <span>Quantidade</span>
-              <b>{t.quantidade}</b>
-            </div>
-            <div className="cab-campo cab-id">
-              <span>Ticket</span>
-              <b>#{t.id}</b>
-              <small>{formatarData(t.created_at)}</small>
-            </div>
+      {tickets.map((t) => {
+        const partes = PARTES.filter((p) => t.operacoes.some((o) => o.parte === p));
+        return (
+          <div key={t.id} className="ticket" style={{ gridTemplateColumns: `repeat(${partes.length}, 1fr)` }}>
+            {partes.map((p) => (
+              <div key={p} className="parte">
+                <Cabecalho t={t} />
+                <div className="parte-titulo">{NOME_PARTE[p]}</div>
+                {/* ordem invertida: a 1ª operação fica embaixo, para destacar de baixo para cima */}
+                {t.operacoes
+                  .filter((o) => o.parte === p)
+                  .sort((a, b) => b.ordem - a.ordem)
+                  .map((o) => (
+                    <Cupom key={o.id} t={t} o={o} />
+                  ))}
+              </div>
+            ))}
           </div>
-
-          {PARTES.filter((p) => t.operacoes.some((o) => o.parte === p)).map((p) => (
-            <div key={p} className="parte">
-              <div className="parte-titulo">{NOME_PARTE[p]}</div>
-              {t.operacoes
-                .filter((o) => o.parte === p)
-                .sort((a, b) => a.ordem - b.ordem)
-                .map((o) => (
-                  <Cupom key={o.id} t={t} o={o} />
-                ))}
-            </div>
-          ))}
-        </div>
-      ))}
+        );
+      })}
     </>
   );
 }
@@ -138,33 +151,41 @@ export default function ImprimirTicketsPage() {
           align-items: center; background: var(--rosa-fundo); color: var(--tinta); border-bottom: 1px solid #f3dfe7;
           padding: 10px 24px; font-size: 14px;
           font-weight: 600; }
-        .ticket { background: #fff; width: 190mm; margin: 20px auto; padding: 8mm 10mm; box-sizing: border-box;
-          box-shadow: 0 2px 10px rgba(0,0,0,.12); color: #000; }
-        .cabecalho { display: grid; grid-template-columns: 1.2fr 2fr 1.3fr .9fr 1fr 1fr; border: 2px solid #000; }
-        .cab-campo { display: flex; flex-direction: column; padding: 5px 8px; border-right: 1px solid #000; min-width: 0; }
-        .cab-campo:last-child { border-right: none; }
-        .cab-campo span { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: #444; }
-        .cab-campo b { font-size: 17px; line-height: 1.2; overflow-wrap: anywhere; }
-        .cab-campo small { font-size: 9.5px; color: #333; line-height: 1.2; }
-        .cab-op b { font-size: 22px; }
-        .cab-id b { font-size: 13px; }
-        .parte { margin-top: 5mm; }
-        .parte-titulo { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+        .ticket { display: grid; gap: 0; background: #fff; width: 190mm; margin: 20px auto; padding: 8mm 0;
+          box-sizing: border-box; box-shadow: 0 2px 10px rgba(0,0,0,.12); color: #000; }
+        .parte { padding: 0 5mm; min-width: 0; }
+        /* linha de corte entre as duas partes */
+        .parte + .parte { border-left: 1.5px dashed #555; }
+        /* fundo preto + 1px de espaço entre as caixas brancas = as linhas da grade do cabeçalho */
+        /* fundo preto + 1px de espaço entre as caixas brancas = as linhas da grade do cabeçalho */
+        .cabecalho { display: grid; grid-template-columns: 1.25fr 1.1fr .7fr .9fr; gap: 1px; background: #000;
+          border: 2px solid #000; }
+        .cab-campo { display: flex; flex-direction: column; padding: 2px 6px 3px; background: #fff; min-width: 0; }
+        .cab-cor { grid-column: span 2; }
+        .cab-id { grid-column: span 2; }
+        .cab-campo span { font-size: 7.5px; text-transform: uppercase; letter-spacing: .5px; color: #444; line-height: 1.2; }
+        .cab-campo b { font-size: 16px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cab-cor b { font-size: 13px; }
+        .cab-id b { font-size: 12px; }
+        .cab-id small { font-size: 9px; font-weight: 400; color: #333; }
+        .parte-titulo { margin-top: 2mm; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
           background: #000; color: #fff; padding: 3px 8px; }
-        .cupom { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1.5px dashed #555;
+        .cupom { display: flex; align-items: center; gap: 8px; padding: 5px 2px; border-bottom: 1.5px dashed #555;
           break-inside: avoid; page-break-inside: avoid; min-height: 19mm; box-sizing: border-box; }
-        .cupom-ordem { font-size: 20px; font-weight: 900; width: 34px; text-align: center; flex-shrink: 0; }
+        .cupom-ordem { font-size: 18px; font-weight: 900; width: 26px; text-align: center; flex-shrink: 0; }
         .cupom-info { flex: 1; min-width: 0; }
-        .cupom-nome { font-size: 14.5px; font-weight: 800; line-height: 1.2; }
-        .cupom-maquina { font-size: 11.5px; margin-top: 1px; }
-        .cupom-ref { font-size: 10px; color: #222; margin-top: 3px; }
+        .cupom-nome { font-size: 13px; font-weight: 800; line-height: 1.2; }
+        .cupom-maquina { font-size: 10.5px; margin-top: 1px; }
+        .cupom-ref { font-size: 9px; color: #222; margin-top: 2px; line-height: 1.3; }
         .cupom-codigo { flex-shrink: 0; }
-        .cupom-codigo svg { display: block; height: 58px; width: auto; }
+        .cupom-codigo svg { display: block; height: 52px; width: auto; }
         @media print {
           @page { size: A4; margin: 8mm; }
           .nao-imprimir { display: none !important; }
           .pagina-impressao { background: #fff; padding: 0; }
           .ticket { margin: 0; width: auto; padding: 0; box-shadow: none; break-after: page; page-break-after: always; }
+          .parte:first-child { padding-left: 0; }
+          .parte:last-child { padding-right: 0; }
           .ticket:last-child { break-after: auto; page-break-after: auto; }
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
