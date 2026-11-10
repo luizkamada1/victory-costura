@@ -16,9 +16,9 @@ function CodigoDeBarras({ valor }: { valor: string }) {
       JsBarcode(ref.current, valor, {
         format: valor.length % 2 === 0 ? "CODE128C" : "CODE128",
         width: 2,
-        height: 46,
+        height: 40,
         margin: 0,
-        fontSize: 14,
+        fontSize: 13,
         textMargin: 2,
         font: "monospace",
       });
@@ -35,8 +35,10 @@ function Cupom({ t, o }: { t: Ticket; o: TicketOperacao }) {
         <div className="cupom-nome">{o.nome_operacao}</div>
         <div className="cupom-maquina">Máquina: {o.maquina ?? "—"}</div>
         <div className="cupom-ref">
-          OP <b>{t.op}</b> · Ref <b>{t.referencia}</b> · {t.cor ?? "—"} · Tam <b>{t.tamanho ?? "—"}</b> · Qtd{" "}
-          <b>{t.quantidade}</b>
+          OP <b>{t.op}</b> · Ref <b>{t.referencia}</b>
+        </div>
+        <div className="cupom-ref">
+          Tam <b>{t.tamanho ?? "—"}</b> · Qtd <b>{t.quantidade}</b> · {t.cor ?? "—"}
         </div>
       </div>
       <div className="cupom-codigo">
@@ -81,6 +83,47 @@ function Cabecalho({ t }: { t: Ticket }) {
   );
 }
 
+// Estimativa da altura de cada parte na folha, em mm, para decidir quantas linhas cabem.
+// Folha A4 (297mm) menos as margens de 8mm em cima e embaixo.
+const ALTURA_UTIL = 281;
+const ALTURA_FIXA = 34; // cabeçalho + título da parte + respiro da célula
+const ALTURA_CUPOM = 14.5; // o cupom tem 14mm; a folga cobre nomes de operação em duas linhas
+
+type Bloco = { chave: string; t: Ticket; parte: (typeof PARTES)[number]; ops: TicketOperacao[] };
+
+// Distribui as partes de todos os tickets em folhas com 2 colunas: a 1ª linha recebe o
+// 1º ticket (superior | inferior), a 2ª o próximo, e assim por diante. Uma folha nova
+// só começa quando a próxima linha não cabe mais.
+function montarFolhas(tickets: Ticket[]): Bloco[][][] {
+  const blocos: Bloco[] = tickets.flatMap((t) =>
+    PARTES.filter((p) => t.operacoes.some((o) => o.parte === p)).map((p) => ({
+      chave: `${t.id}-${p}`,
+      t,
+      parte: p,
+      // ordem invertida: a 1ª operação fica embaixo, para destacar de baixo para cima
+      ops: t.operacoes.filter((o) => o.parte === p).sort((a, b) => b.ordem - a.ordem),
+    }))
+  );
+  const linhas: Bloco[][] = [];
+  for (let i = 0; i < blocos.length; i += 2) linhas.push(blocos.slice(i, i + 2));
+
+  const folhas: Bloco[][][] = [];
+  let atual: Bloco[][] = [];
+  let usado = 0;
+  for (const linha of linhas) {
+    const altura = ALTURA_FIXA + Math.max(...linha.map((b) => b.ops.length)) * ALTURA_CUPOM;
+    if (atual.length && usado + altura > ALTURA_UTIL) {
+      folhas.push(atual);
+      atual = [];
+      usado = 0;
+    }
+    atual.push(linha);
+    usado += altura;
+  }
+  if (atual.length) folhas.push(atual);
+  return folhas;
+}
+
 function Tickets() {
   const params = useSearchParams();
   const ids = params.get("ids") ?? "";
@@ -96,12 +139,15 @@ function Tickets() {
   if (erro) return <p style={{ padding: 24, color: "var(--erro)" }}>Não foi possível abrir os tickets: {erro}</p>;
   if (!tickets) return <p style={{ padding: 24 }}>Carregando os tickets…</p>;
 
+  const folhas = montarFolhas(tickets);
+
   return (
     <>
       <div className="barra-impressao nao-imprimir">
         <span className="num">
           {tickets.length} {tickets.length === 1 ? "ticket" : "tickets"} ·{" "}
-          {tickets.reduce((s, t) => s + t.operacoes.length, 0)} cupons
+          {tickets.reduce((s, t) => s + t.operacoes.length, 0)} cupons · {folhas.length}{" "}
+          {folhas.length === 1 ? "folha" : "folhas"}
         </span>
         <div style={{ display: "flex", gap: 8 }}>
           <a href="/tickets" className="botao botao-secundario">
@@ -115,26 +161,19 @@ function Tickets() {
         </div>
       </div>
 
-      {tickets.map((t) => {
-        const partes = PARTES.filter((p) => t.operacoes.some((o) => o.parte === p));
-        return (
-          <div key={t.id} className="ticket" style={{ gridTemplateColumns: `repeat(${partes.length}, 1fr)` }}>
-            {partes.map((p) => (
-              <div key={p} className="parte">
-                <Cabecalho t={t} />
-                <div className="parte-titulo">{NOME_PARTE[p]}</div>
-                {/* ordem invertida: a 1ª operação fica embaixo, para destacar de baixo para cima */}
-                {t.operacoes
-                  .filter((o) => o.parte === p)
-                  .sort((a, b) => b.ordem - a.ordem)
-                  .map((o) => (
-                    <Cupom key={o.id} t={t} o={o} />
-                  ))}
-              </div>
-            ))}
-          </div>
-        );
-      })}
+      {folhas.map((linhas, f) => (
+        <div key={f} className="folha">
+          {linhas.flat().map((b) => (
+            <div key={b.chave} className="parte">
+              <Cabecalho t={b.t} />
+              <div className="parte-titulo">{NOME_PARTE[b.parte]}</div>
+              {b.ops.map((o) => (
+                <Cupom key={o.id} t={b.t} o={o} />
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
     </>
   );
 }
@@ -151,12 +190,14 @@ export default function ImprimirTicketsPage() {
           align-items: center; background: var(--rosa-fundo); color: var(--tinta); border-bottom: 1px solid #f3dfe7;
           padding: 10px 24px; font-size: 14px;
           font-weight: 600; }
-        .ticket { display: grid; gap: 0; background: #fff; width: 190mm; margin: 20px auto; padding: 8mm 0;
-          box-sizing: border-box; box-shadow: 0 2px 10px rgba(0,0,0,.12); color: #000; }
-        .parte { padding: 0 5mm; min-width: 0; }
-        /* linha de corte entre as duas partes */
-        .parte + .parte { border-left: 1.5px dashed #555; }
-        /* fundo preto + 1px de espaço entre as caixas brancas = as linhas da grade do cabeçalho */
+        /* folha A4: 2 colunas; cada parte ocupa cerca de 1/4 da folha */
+        .folha { display: grid; grid-template-columns: 1fr 1fr; align-content: start; background: #fff;
+          width: 210mm; min-height: 297mm; margin: 20px auto; padding: 8mm; box-sizing: border-box;
+          box-shadow: 0 2px 10px rgba(0,0,0,.12); color: #000; }
+        .parte { padding: 4mm; min-width: 0; break-inside: avoid; page-break-inside: avoid; }
+        /* linhas de corte entre as partes */
+        .parte:nth-child(2n) { border-left: 1.5px dashed #555; }
+        .parte:nth-child(n+3) { border-top: 1.5px dashed #555; }
         /* fundo preto + 1px de espaço entre as caixas brancas = as linhas da grade do cabeçalho */
         .cabecalho { display: grid; grid-template-columns: 1.25fr 1.1fr .7fr .9fr; gap: 1px; background: #000;
           border: 2px solid #000; }
@@ -170,23 +211,21 @@ export default function ImprimirTicketsPage() {
         .cab-id small { font-size: 9px; font-weight: 400; color: #333; }
         .parte-titulo { margin-top: 2mm; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
           background: #000; color: #fff; padding: 3px 8px; }
-        .cupom { display: flex; align-items: center; gap: 8px; padding: 5px 2px; border-bottom: 1.5px dashed #555;
-          break-inside: avoid; page-break-inside: avoid; min-height: 19mm; box-sizing: border-box; }
+        .cupom { display: flex; align-items: center; gap: 8px; padding: 2px 2px; border-bottom: 1.5px dashed #555;
+          break-inside: avoid; page-break-inside: avoid; min-height: 14mm; box-sizing: border-box; }
         .cupom-ordem { font-size: 18px; font-weight: 900; width: 26px; text-align: center; flex-shrink: 0; }
         .cupom-info { flex: 1; min-width: 0; }
-        .cupom-nome { font-size: 13px; font-weight: 800; line-height: 1.2; }
-        .cupom-maquina { font-size: 10.5px; margin-top: 1px; }
-        .cupom-ref { font-size: 9px; color: #222; margin-top: 2px; line-height: 1.3; }
+        .cupom-nome { font-size: 12px; font-weight: 800; line-height: 1.1; }
+        .cupom-maquina { font-size: 9.5px; line-height: 1.15; }
+        .cupom-ref { font-size: 8px; color: #222; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cupom-codigo { flex-shrink: 0; }
-        .cupom-codigo svg { display: block; height: 52px; width: auto; }
+        .cupom-codigo svg { display: block; height: 42px; width: auto; }
         @media print {
           @page { size: A4; margin: 8mm; }
           .nao-imprimir { display: none !important; }
           .pagina-impressao { background: #fff; padding: 0; }
-          .ticket { margin: 0; width: auto; padding: 0; box-shadow: none; break-after: page; page-break-after: always; }
-          .parte:first-child { padding-left: 0; }
-          .parte:last-child { padding-right: 0; }
-          .ticket:last-child { break-after: auto; page-break-after: auto; }
+          .folha { margin: 0; width: auto; min-height: 0; padding: 0; box-shadow: none; break-after: page; page-break-after: always; }
+          .folha:last-child { break-after: auto; page-break-after: auto; }
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
