@@ -4,20 +4,20 @@
 
 :root {
   /* rosa do pijama */
-  --rosa-fundo: #fae9ef;
-  --rosa-claro: #fbe6ee;
-  --rosa-medio: #f2c6d5;
-  --rosa-nervura: #eaa9bf;
-  --rosa: #d76f93;
+  --rosa-fundo: #fdf1f5;
+  --rosa-claro: #fdedf3;
+  --rosa-medio: #f8dbe6;
+  --rosa-nervura: #f4c8d7;
+  --rosa: #e690ae;
   --rosa-escuro: #a9466c;
 
   /* grafite para a ação principal, como nos botões da Apple */
   --grafite: #1d1d1f;
   --grafite-2: #3a3a3c;
 
-  --algodao: #fdf6f8;
+  --algodao: #fef9fb;
   --superficie: #ffffff;
-  --superficie-2: #f8edf1;
+  --superficie-2: #fbf1f5;
   --regua: #e8e8ed;
   --regua-forte: #d2d2d7;
 
@@ -127,7 +127,7 @@ h3 {
   display: flex;
   flex-direction: column;
   background-color: var(--rosa-fundo);
-  border-right: 1px solid #f1d3de;
+  border-right: 1px solid #f6e1e9;
   color: var(--tinta-2);
   overflow: hidden;
   z-index: 20;
@@ -372,7 +372,7 @@ h3 {
     padding: 0 10px;
     background: color-mix(in srgb, var(--rosa-fundo) 88%, transparent);
     backdrop-filter: saturate(180%) blur(20px);
-    border-bottom: 1px solid #f3dfe7;
+    border-bottom: 1px solid #f6e1e9;
     color: var(--tinta);
     font-family: var(--fonte-titulo);
     font-weight: 600;
@@ -586,7 +586,7 @@ input[type="checkbox"] {
     background: var(--grafite-2);
   }
   .botao-secundario:hover:not(:disabled) {
-    background: #f2e1e8;
+    background: #f7e6ed;
   }
   .botao-fantasma:hover:not(:disabled) {
     background: var(--superficie-2);
@@ -1044,7 +1044,7 @@ input[type="checkbox"] {
   gap: 2px;
   padding: 3px;
   border-radius: 11px;
-  background: rgba(215, 111, 147, 0.1);
+  background: rgba(230, 144, 174, 0.12);
 }
 
 .periodo-fichas .ficha {
