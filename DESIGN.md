@@ -10,14 +10,14 @@ Estratégia contida: o rosa bem suave veste a casca (menu) e marca seleção; o 
 
 | Papel | Token | Valor |
 | --- | --- | --- |
-| Fundo do menu lateral | `--rosa-fundo` | `#fdf4f7` |
+| Fundo do menu lateral | `--rosa-fundo` | `#fae9ef` |
 | Item ativo, seleção, selo "Superior" | `--rosa-claro` | `#fbe6ee` |
 | Divisórias e seleção de texto | `--rosa-medio` | `#f2c6d5` |
 | Nervura da faixa | `--rosa-nervura` | `#eaa9bf` |
 | Foco, nervura nova, progresso | `--rosa` | `#d76f93` |
 | Texto e ícones sobre rosa | `--rosa-escuro` | `#a9466c` |
 | Botão principal | `--grafite` | `#1d1d1f` |
-| Fundo de trabalho | `--algodao` | `#f5f5f7` |
+| Fundo de trabalho (rosa bem claro) | `--algodao` | `#fdf6f8` |
 | Blocos | `--superficie` | `#ffffff` |
 | Texto | `--tinta` / `--tinta-2` / `--tinta-3` | `#1d1d1f` / `#424245` / `#6e6e73` |
 | Réguas | `--regua` / `--regua-forte` | `#e8e8ed` / `#d2d2d7` |
@@ -31,7 +31,7 @@ Estilo Apple: San Francisco do sistema no Mac e no iPhone (`-apple-system`, `SF 
 
 ## Forma e densidade
 
-- Blocos: brancos, sem borda nem sombra, raio 18px, sobre o fundo `#f5f5f7`.
+- Blocos: brancos, sem borda nem sombra, raio 18px, sobre o fundo rosa bem claro `#fdf6f8`.
 - Botões em pílula (raio 999px), 36px (30px nos pequenos); principal grafite, secundário cinza-claro.
 - Campos: 40px, raio 10px, foco com anel rosa.
 - Período: controle segmentado (fundo cinza translúcido, opção escolhida em branco com sombra curta).
