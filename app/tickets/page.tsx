@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Search, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { ChevronRight, FilePlus2, Printer, Search, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import {
@@ -35,6 +35,7 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
+  const [gerados, setGerados] = useState<number | null>(null);
   const [ajustes, setAjustes] = useState<AjustesGrade>({ ...AJUSTES_PADRAO });
 
   // formulário de geração
@@ -70,11 +71,23 @@ export default function TicketsPage() {
     carregarTickets("");
   }, []);
 
-  async function carregarTickets(filtroOp: string) {
+  // ao voltar da aba de impressão, atualiza a coluna Impresso sem perder busca e seleção
+  const estado = useRef({ buscaOp, selecionados });
+  estado.current = { buscaOp, selecionados };
+  useEffect(() => {
+    const voltar = () => {
+      if (document.visibilityState === "visible") carregarTickets(estado.current.buscaOp, estado.current.selecionados);
+    };
+    document.addEventListener("visibilitychange", voltar);
+    return () => document.removeEventListener("visibilitychange", voltar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function carregarTickets(filtroOp: string, manterSelecao?: Set<number>) {
     try {
       const r = await api<{ tickets: Ticket[] }>(`/api/tickets${filtroOp.trim() ? `?op=${encodeURIComponent(filtroOp.trim())}` : ""}`);
       setTickets(r.tickets);
-      setSelecionados(new Set());
+      setSelecionados(manterSelecao ?? new Set());
     } catch (e) {
       setErro(mensagemErro(e));
     }
@@ -112,12 +125,13 @@ export default function TicketsPage() {
     setGrupos((atual) => atual.map((g) => (g.chave === chave ? { ...g, qtd: { ...g.qtd, [tamanho]: valor } } : g)));
   }
 
-  async function gerar(e: React.FormEvent) {
-    e.preventDefault();
+  // imprimirAgora = false gera e deixa os tickets marcados na lista, para imprimir vários juntos depois
+  async function gerar(imprimirAgora: boolean) {
     setErro(null);
+    setGerados(null);
     setGerando(true);
     // abre a aba antes do await para o navegador não bloquear como pop-up
-    const aba = window.open("", "_blank");
+    const aba = imprimirAgora ? window.open("", "_blank") : null;
     try {
       const r = await api<{ ids: number[] }>("/api/tickets", {
         method: "POST",
@@ -129,12 +143,19 @@ export default function TicketsPage() {
           grupos: grupos.map((g) => ({ cor: g.cor, linhas: linhasDo(g) })),
         }),
       });
-      const url = `/tickets/imprimir?ids=${r.ids.join(",")}`;
-      if (aba) aba.location.href = url;
-      else window.location.href = url;
       setGrupos((atual) => atual.map((g) => ({ ...g, qtd: {} })));
-      setBuscaOp(op);
-      await carregarTickets(op);
+      if (imprimirAgora) {
+        const url = `/tickets/imprimir?ids=${r.ids.join(",")}`;
+        if (aba) aba.location.href = url;
+        else window.location.href = url;
+        setBuscaOp(op);
+        await carregarTickets(op);
+      } else {
+        // mostra os mais recentes de todas as OPs, somando os novos à seleção que já existia
+        setBuscaOp("");
+        await carregarTickets("", new Set([...Array.from(selecionados), ...r.ids]));
+        setGerados(r.ids.length);
+      }
     } catch (e) {
       aba?.close();
       setErro(mensagemErro(e));
@@ -202,7 +223,13 @@ export default function TicketsPage() {
     <ProducaoLayout titulo="Tickets" subtitulo="Gere os tickets de uma OP. Cada operação vira um cupom destacável com código de barras.">
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
-      <form className="bloco" onSubmit={gerar}>
+      <form
+        className="bloco"
+        onSubmit={(e) => {
+          e.preventDefault();
+          gerar(true);
+        }}
+      >
         <div className="bloco-cabecalho">
           <div>
             <h2>Gerar tickets</h2>
@@ -313,9 +340,13 @@ export default function TicketsPage() {
         )}
 
         <div className="gerar-rodape">
-          <button type="submit" className="botao botao-primario" disabled={gerando || !podeGerar}>
+          <button type="submit" className="botao botao-contorno" disabled={gerando || !podeGerar}>
             <Printer size={16} aria-hidden />
             {gerando ? "Gerando…" : "Gerar e imprimir"}
+          </button>
+          <button type="button" className="botao botao-contorno" disabled={gerando || !podeGerar} onClick={() => gerar(false)}>
+            <FilePlus2 size={16} aria-hidden />
+            Somente gerar
           </button>
           {item && (
             <span className="num fraco">
@@ -326,6 +357,14 @@ export default function TicketsPage() {
             </span>
           )}
         </div>
+        {gerados !== null && (
+          <div style={{ marginTop: 14 }}>
+            <Aviso tipo="ok">
+              {gerados} {gerados === 1 ? "ticket gerado e marcado" : "tickets gerados e marcados"} na lista abaixo. Gere
+              outros se quiser e clique em <strong>Imprimir</strong> para imprimir todos juntos.
+            </Aviso>
+          </div>
+        )}
       </form>
 
       <section className="bloco">
@@ -340,6 +379,15 @@ export default function TicketsPage() {
               carregarTickets(buscaOp);
             }}
           >
+            {tickets.some((t) => t.impresso_em === null) && (
+              <button
+                type="button"
+                className="botao botao-secundario"
+                onClick={() => setSelecionados(new Set(tickets.filter((t) => t.impresso_em === null).map((t) => t.id)))}
+              >
+                Selecionar não impressos
+              </button>
+            )}
             {selecionados.size > 0 && (
               <button type="button" className="botao botao-primario" onClick={() => imprimir(Array.from(selecionados))}>
                 <Printer size={16} aria-hidden />
@@ -432,7 +480,19 @@ export default function TicketsPage() {
                         <td className="num">{formatarData(t.created_at)}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div className="acoes">
-                            <button type="button" className="botao botao-pequeno botao-fantasma" onClick={() => imprimir([t.id])}>
+                            {/* rosa: ainda não impresso */}
+                            <button
+                              type="button"
+                              className={`botao botao-pequeno botao-fantasma ${t.impresso_em === null ? "imprimir-pendente" : ""}`}
+                              onClick={() => imprimir([t.id])}
+                              title={
+                                t.impresso_em
+                                  ? `Impresso em ${formatarData(t.impresso_em)}`
+                                  : t.impresso_em === null
+                                    ? "Ainda não impresso"
+                                    : undefined
+                              }
+                            >
                               <Printer size={14} aria-hidden />
                               Imprimir
                             </button>

@@ -50,7 +50,10 @@ export default function ApontamentoPage() {
   const [apontamentos, setApontamentos] = useState<Apontamento[]>([]);
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [retorno, setRetorno] = useState<Retorno | null>(null);
-  const [enviando, setEnviando] = useState(false);
+  const [pendentes, setPendentes] = useState(0);
+  // Leituras esperando gravação: o leitor pode mandar o próximo cupom antes do anterior gravar
+  const fila = useRef<{ codigo: string; costureiraId: string; data: string }[]>([]);
+  const processando = useRef(false);
   const [novaId, setNovaId] = useState<number | null>(null);
   const campo = useRef<HTMLInputElement>(null);
 
@@ -84,37 +87,63 @@ export default function ApontamentoPage() {
     campo.current?.focus();
   }, [carregar]);
 
-  async function apontar(e: React.FormEvent) {
+  function apontar(e: React.FormEvent) {
     e.preventDefault();
     const valor = codigo.trim();
-    if (!valor || enviando) return;
     setCodigo("");
+    if (!valor) return;
     if (!costureiraId) {
       bipe(false);
       setRetorno({ tipo: "erro", texto: "Escolha a costureira antes de escanear." });
       return;
     }
-    setEnviando(true);
-    try {
-      const r = await api<{ apontamento: Apontamento }>("/api/apontamentos", {
-        method: "POST",
-        body: JSON.stringify({ codigo: valor, costureira_id: Number(costureiraId), data }),
-      });
-      const a = r.apontamento;
-      bipe(true);
-      setNovaId(a.id);
-      setRetorno({
-        tipo: "ok",
-        texto: `${a.nome_operacao} · OP ${a.ticket.op} · Tam ${a.ticket.tamanho ?? "—"} · ${a.quantidade} peças · ${minutos(a.minutos_total)} min`,
-      });
-      await carregar();
-    } catch (err) {
-      bipe(false);
-      setRetorno({ tipo: "erro", texto: mensagemErro(err) });
-    } finally {
-      setEnviando(false);
-      campo.current?.focus();
+    fila.current.push({ codigo: valor, costureiraId, data });
+    setPendentes(fila.current.length);
+    processarFila();
+  }
+
+  // Grava as leituras uma de cada vez, na ordem em que foram feitas. Se alguma der erro,
+  // a mensagem de erro fica na tela mesmo que as leituras seguintes deem certo.
+  async function processarFila() {
+    if (processando.current) return;
+    processando.current = true;
+    const erros: string[] = [];
+    let gravados = 0;
+    while (fila.current.length) {
+      const item = fila.current[0];
+      try {
+        const r = await api<{ apontamento: Apontamento }>("/api/apontamentos", {
+          method: "POST",
+          body: JSON.stringify({ codigo: item.codigo, costureira_id: Number(item.costureiraId), data: item.data }),
+        });
+        const a = r.apontamento;
+        gravados++;
+        bipe(true);
+        setNovaId(a.id);
+        if (!erros.length) {
+          setRetorno({
+            tipo: "ok",
+            texto: `${a.nome_operacao} · OP ${a.ticket.op} · Tam ${a.ticket.tamanho ?? "—"} · ${a.quantidade} peças · ${minutos(a.minutos_total)} min`,
+          });
+        }
+      } catch (err) {
+        bipe(false);
+        erros.push(`${item.codigo}: ${mensagemErro(err)}`);
+      }
+      if (erros.length) {
+        setRetorno({
+          tipo: "erro",
+          texto:
+            erros.join(" · ") +
+            (gravados ? ` (${gravados} ${gravados === 1 ? "outro cupom foi apontado" : "outros cupons foram apontados"})` : ""),
+        });
+      }
+      fila.current.shift();
+      setPendentes(fila.current.length);
     }
+    processando.current = false;
+    await carregar();
+    campo.current?.focus();
   }
 
   async function desfazer(a: Apontamento) {
@@ -186,7 +215,7 @@ export default function ApontamentoPage() {
           </label>
           <label className="campo">
             <span>Dia da produção</span>
-            <input type="date" className="entrada" value={data} onChange={(e) => setData(e.target.value)} />
+            <input type="date" className="entrada" value={data} max={hojeISO()} onChange={(e) => setData(e.target.value)} />
           </label>
           <form onSubmit={apontar} className="campo leitor">
             <label htmlFor="codigo-cupom">Código do cupom</label>
@@ -204,6 +233,11 @@ export default function ApontamentoPage() {
                 inputMode="numeric"
               />
             </div>
+            {pendentes > 0 && (
+              <small className="num">
+                Gravando {pendentes} {pendentes === 1 ? "cupom" : "cupons"}… pode continuar escaneando.
+              </small>
+            )}
           </form>
         </div>
         {retorno && (

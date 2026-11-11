@@ -113,3 +113,6 @@ insert into ajustes_grade (grade, percentual) values
   ('Adulto', 0), ('Plus Size', 10), ('Juvenil', -5), ('Infantil', -10)
 on conflict (grade) do nothing;
 alter table ajustes_grade enable row level security;
+
+-- Quando o ticket foi impresso pela primeira vez (null = ainda não impresso)
+alter table tickets add column if not exists impresso_em timestamptz;

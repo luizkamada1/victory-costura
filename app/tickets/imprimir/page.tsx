@@ -139,6 +139,19 @@ function Tickets() {
       .catch((e) => setErro(mensagemErro(e)));
   }, [ids]);
 
+  // Marca os tickets como impressos quando a janela de impressão do navegador fecha
+  // (pelo botão Imprimir ou pelo Ctrl+P). O navegador não informa se a pessoa cancelou.
+  useEffect(() => {
+    if (!tickets?.length) return;
+    const marcar = () => {
+      api("/api/tickets", { method: "PATCH", body: JSON.stringify({ ids: tickets.map((t) => t.id) }) }).catch(() => {
+        // sem o campo no banco, só não registra a impressão
+      });
+    };
+    window.addEventListener("afterprint", marcar);
+    return () => window.removeEventListener("afterprint", marcar);
+  }, [tickets]);
+
   if (erro) return <p style={{ padding: 24, color: "var(--erro)" }}>Não foi possível abrir os tickets: {erro}</p>;
   if (!tickets) return <p style={{ padding: 24 }}>Carregando os tickets…</p>;
 

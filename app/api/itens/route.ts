@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
-import { respostaErro } from "@/lib/producao-api";
+import { buscarTodos, respostaErro } from "@/lib/producao-api";
 import { PARTES } from "@/lib/producao";
 
 export const runtime = "nodejs";
@@ -19,15 +19,24 @@ function limparLista(valor: unknown): string[] {
 export async function GET() {
   try {
     const supabase = getSupabaseServer();
-    const [{ data: itens, error }, { data: vinculos, error: erroVinculos }] = await Promise.all([
+    // Os vínculos passam de 1.000 linhas com poucas dezenas de itens; sem paginar, o Supabase
+    // cortaria a lista e um item salvo depois perderia as operações que não vieram.
+    const [{ data: itens, error }, vinculos] = await Promise.all([
       supabase.from("itens").select("id, referencia, nome, grades, tamanhos, cores, partes").order("referencia"),
-      supabase.from("item_operacoes").select("item_id, operacao_id, ordem").order("ordem"),
+      buscarTodos((de, ate) =>
+        supabase
+          .from("item_operacoes")
+          .select("item_id, operacao_id, ordem")
+          .order("item_id")
+          .order("ordem")
+          .order("id")
+          .range(de, ate)
+      ),
     ]);
     if (error) throw error;
-    if (erroVinculos) throw erroVinculos;
 
     const porItem = new Map<number, { operacao_id: number; ordem: number }[]>();
-    for (const v of vinculos ?? []) {
+    for (const v of vinculos) {
       const lista = porItem.get(v.item_id) ?? [];
       lista.push({ operacao_id: v.operacao_id, ordem: v.ordem });
       porItem.set(v.item_id, lista);

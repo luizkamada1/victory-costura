@@ -86,6 +86,7 @@ export type Ticket = {
   partes: Parte[];
   quantidade: number;
   created_at: string;
+  impresso_em?: string | null; // primeira impressão; ausente enquanto o campo não existir no banco
   operacoes: TicketOperacao[];
 };
 
@@ -114,6 +115,11 @@ export function hojeISO() {
   const d = new Date();
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
+}
+
+// Data "YYYY-MM-DD" no horário de Brasília (o servidor roda em UTC)
+export function dataBrasilia(instante: Date | string = new Date()) {
+  return new Date(instante).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 }
 
 export function diaSemana(dataISO: string) {

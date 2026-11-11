@@ -1475,3 +1475,24 @@ input[type="checkbox"] {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+
+/* tickets: texto e ícone do botão Imprimir em rosa enquanto o ticket não foi impresso */
+.botao.imprimir-pendente {
+  color: var(--rosa-escuro);
+}
+
+/* botão de contorno: fundo branco e borda fina; ao passar o mouse fica rosa */
+.botao-contorno {
+  background: var(--superficie);
+  border-color: var(--regua-forte);
+  color: var(--tinta);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .botao-contorno:hover:not(:disabled) {
+    background: var(--rosa-claro);
+    border-color: var(--rosa-medio);
+    color: var(--rosa-escuro);
+  }
+}

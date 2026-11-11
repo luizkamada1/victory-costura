@@ -21,11 +21,17 @@ export async function GET(req: NextRequest) {
       .filter((n) => n > 0);
     const op = req.nextUrl.searchParams.get("op")?.trim();
 
-    let consulta = supabase.from("tickets").select(CAMPOS_TICKET).order("id", { ascending: false });
-    if (ids.length > 0) consulta = consulta.in("id", ids);
-    else if (op) consulta = consulta.eq("op", op);
-    const { data: tickets, error } = await consulta.limit(ids.length > 0 ? ids.length : 200);
-    if (error) throw error;
+    const buscar = (campos: string) => {
+      let consulta = supabase.from("tickets").select(campos).order("id", { ascending: false });
+      if (ids.length > 0) consulta = consulta.in("id", ids);
+      else if (op) consulta = consulta.eq("op", op);
+      return consulta.limit(ids.length > 0 ? ids.length : 200);
+    };
+    let resposta = await buscar(`${CAMPOS_TICKET}, impresso_em`);
+    // enquanto o campo impresso_em não for criado no banco, a lista funciona sem ele
+    if (resposta.error && resposta.error.code === "42703") resposta = await buscar(CAMPOS_TICKET);
+    if (resposta.error) throw resposta.error;
+    const tickets = resposta.data as unknown as { id: number }[] | null;
 
     const operacoes = [];
     for (const bloco of emBlocos((tickets ?? []).map((t) => t.id))) {
@@ -192,6 +198,32 @@ export async function DELETE(req: NextRequest) {
     }
     const { error } = await supabase.from("tickets").delete().eq("id", id);
     if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return respostaErro(err);
+  }
+}
+
+// body: { ids: [1, 2, 3] } → marca os tickets como impressos (guarda só a primeira impressão)
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const ids: number[] = (Array.isArray(body.ids) ? body.ids : []).map(Number).filter((n: number) => n > 0);
+    if (ids.length === 0) return NextResponse.json({ ok: true });
+    const supabase = getSupabaseServer();
+    for (const bloco of emBlocos(ids)) {
+      const { error } = await supabase
+        .from("tickets")
+        .update({ impresso_em: new Date().toISOString() })
+        .in("id", bloco)
+        .is("impresso_em", null);
+      if (error) {
+        if (error.code === "42703") {
+          return respostaErro(new Error("O campo de impressão ainda não existe no banco. Rode o trecho novo do supabase_setup.sql."), 400);
+        }
+        throw error;
+      }
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     return respostaErro(err);

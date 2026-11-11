@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { respostaErro } from "@/lib/producao-api";
-import { formatarData, idDoCodigo } from "@/lib/producao";
+import { dataBrasilia, formatarData, idDoCodigo } from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     if (!id) return respostaErro(new Error(`Código inválido: "${body.codigo}"`), 400);
     if (!costureiraId) return respostaErro(new Error("Selecione a costureira"), 400);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return respostaErro(new Error("Informe a data"), 400);
+    if (data > dataBrasilia()) return respostaErro(new Error("Não dá para apontar produção numa data futura"), 400);
 
     const supabase = getSupabaseServer();
     const { data: atual, error: erroBusca } = await supabase
