@@ -385,14 +385,14 @@ export default function ItensPage() {
                   return (
                     <tr key={item.id} data-selecionada={form?.id === item.id}>
                       <td className="forte num">{item.referencia}</td>
-                      <td>{item.nome}</td>
+                      <td className="quebra">{item.nome}</td>
                       <td>
                         <div>{item.grades.join(", ") || <span className="fraco">—</span>}</div>
                         <div className="fraco" style={{ fontSize: 12 }}>
                           {item.tamanhos.join(" · ")}
                         </div>
                       </td>
-                      <td style={{ fontSize: 13 }}>{item.cores.join(", ") || <span className="fraco">—</span>}</td>
+                      <td className="quebra" style={{ fontSize: 13 }}>{item.cores.join(", ") || <span className="fraco">—</span>}</td>
                       <td>
                         <div className="ops-resumo">
                           {[...PARTES.map((p) => ({ rotulo: NOME_PARTE[p].replace("Parte ", ""), lista: ops.filter((o) => o.parte === p), tem: item.partes.includes(p) })),
@@ -416,9 +416,14 @@ export default function ItensPage() {
                       </td>
                       <td>
                         <div className="acoes">
-                          <button type="button" className="botao botao-pequeno botao-fantasma" onClick={() => editar(item)}>
+                          <button
+                            type="button"
+                            className="botao botao-pequeno botao-icone botao-fantasma"
+                            onClick={() => editar(item)}
+                            aria-label={`Editar ${item.referencia}`}
+                            title="Editar"
+                          >
                             <Pencil size={14} aria-hidden />
-                            Editar
                           </button>
                           <button
                             type="button"

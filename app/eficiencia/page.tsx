@@ -265,7 +265,7 @@ export default function EficienciaPage() {
                       data-selecionada={aberto}
                       aria-expanded={aberto}
                     >
-                      <td className="forte">
+                      <td className="forte quebra">
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                           <ChevronRight
                             size={15}

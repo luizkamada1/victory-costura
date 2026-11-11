@@ -1257,7 +1257,7 @@ input[type="checkbox"] {
 
 .progresso {
   display: grid;
-  grid-template-columns: 70px auto;
+  grid-template-columns: 40px auto;
   align-items: center;
   gap: 8px;
   font-size: 12.5px;
@@ -1494,5 +1494,47 @@ input[type="checkbox"] {
     background: var(--rosa-claro);
     border-color: var(--rosa-medio);
     color: var(--rosa-escuro);
+  }
+}
+
+/* textos longos (nome, cores, motivo) quebram em mais de uma linha para a tabela caber na tela */
+.tabela td.quebra {
+  white-space: normal;
+  min-width: 90px;
+  line-height: 1.3;
+}
+
+.data-curta {
+  display: none;
+}
+
+/* telas médias (notebooks pequenos): menos margem e datas curtas para as tabelas caberem */
+@media (max-width: 1200px) {
+  .pagina {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .bloco {
+    padding: 20px;
+  }
+
+  .tabela-caixa {
+    margin: 0 -20px;
+    padding: 0 20px;
+  }
+
+  .tabela th,
+  .tabela td {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .data-longa {
+    display: none;
+  }
+
+  .data-curta {
+    display: inline;
   }
 }

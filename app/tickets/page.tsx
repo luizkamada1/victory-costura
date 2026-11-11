@@ -206,11 +206,11 @@ export default function TicketsPage() {
       { id: "quantidade", titulo: "Peças", alinhar: "right", valor: (t) => t.quantidade },
       {
         id: "apontadas",
-        titulo: "Cupons apontados",
+        titulo: "Cupons",
         valor: (t) => (t.operacoes.length ? apontadas(t) / t.operacoes.length : 0),
         texto: situacao,
       },
-      { id: "criado", titulo: "Gerado em", valor: (t) => t.created_at, texto: (t) => formatarData(t.created_at) },
+      { id: "criado", titulo: "Gerado", valor: (t) => t.created_at, texto: (t) => formatarData(t.created_at) },
       { id: "acoes", titulo: "", alinhar: "right", ordenavel: false, filtravel: false },
     ],
     { id: "id", direcao: "desc" }
@@ -458,7 +458,7 @@ export default function TicketsPage() {
                         </td>
                         <td className="forte num">{t.op}</td>
                         <td className="num">{t.referencia}</td>
-                        <td>{t.cor ?? <span className="fraco">—</span>}</td>
+                        <td className="quebra">{t.cor ?? <span className="fraco">—</span>}</td>
                         <td>{t.tamanho ?? <span className="fraco">—</span>}</td>
                         <td className="direita">{t.quantidade}</td>
                         <td>
@@ -477,7 +477,10 @@ export default function TicketsPage() {
                             </span>
                           </div>
                         </td>
-                        <td className="num">{formatarData(t.created_at)}</td>
+                        <td className="num">
+                          <span className="data-longa">{formatarData(t.created_at)}</span>
+                          <span className="data-curta">{formatarData(t.created_at).slice(0, 5)}</span>
+                        </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div className="acoes">
                             {/* rosa: ainda não impresso */}

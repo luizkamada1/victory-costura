@@ -289,7 +289,7 @@ export default function JornadaPage() {
                     <td className="direita forte" style={{ color: o.minutos < 0 ? "var(--erro)" : "var(--ok)" }}>
                       {o.minutos > 0 ? `+${o.minutos}` : o.minutos}
                     </td>
-                    <td>{o.descricao ?? <span className="fraco">—</span>}</td>
+                    <td className="quebra">{o.descricao ?? <span className="fraco">—</span>}</td>
                     <td>
                       <div className="acoes">
                         <button
