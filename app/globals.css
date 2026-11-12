@@ -1538,3 +1538,8 @@ input[type="checkbox"] {
     display: inline;
   }
 }
+
+/* tickets: coluna "Único" (a cor inteira num ticket só) destacada das colunas de tamanho */
+.grade-quantidades .col-unico {
+  background: var(--rosa-fundo);
+}

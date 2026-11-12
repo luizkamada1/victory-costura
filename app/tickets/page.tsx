@@ -23,6 +23,9 @@ import {
 type OpcaoParte = "ambas" | Parte;
 const rotuloItem = (i: Item) => `${i.referencia} · ${i.nome}`;
 
+// tamanho gravado no ticket quando a cor vai inteira, sem separar por tamanho
+const TAMANHO_UNICO = "Único";
+
 type GrupoCor = { chave: number; cor: string; qtd: Record<string, string> };
 
 let proximaChave = 0;
@@ -107,7 +110,8 @@ export default function TicketsPage() {
   const tempoPeca = sequencia.reduce((s, o) => s + o.tempo_minutos, 0) * fatorGrade(item?.grades, ajustes);
 
   // Sem tamanhos cadastrados, a grade tem uma coluna só, com o tamanho digitado à mão
-  const tamanhos = item?.tamanhos.length ? item.tamanhos : [tamanhoLivre];
+  // A 1ª coluna é sempre "Único": a quantidade da cor sem separar por tamanho, num ticket só
+  const tamanhos = [TAMANHO_UNICO, ...(item?.tamanhos.length ? item.tamanhos : [tamanhoLivre])];
   const linhasDo = (g: GrupoCor) => tamanhos.map((t) => ({ tamanho: t, quantidade: Number(g.qtd[t]) || 0 }));
   const totalDo = (g: GrupoCor) => linhasDo(g).reduce((s, l) => s + l.quantidade, 0);
   const totalPecas = grupos.reduce((s, g) => s + totalDo(g), 0);
@@ -304,8 +308,13 @@ export default function TicketsPage() {
                   <tr>
                     <th>Cor</th>
                     {tamanhos.map((t, i) => (
-                      <th key={i} className="direita" style={{ textAlign: "center" }}>
-                        {item.tamanhos.length ? t : "Peças"}
+                      <th
+                        key={i}
+                        className={`direita ${t === TAMANHO_UNICO ? "col-unico" : ""}`}
+                        style={{ textAlign: "center" }}
+                        title={t === TAMANHO_UNICO ? "Todos os tamanhos juntos, num ticket só" : undefined}
+                      >
+                        {t === TAMANHO_UNICO ? "Único" : item.tamanhos.length ? t : "Peças"}
                       </th>
                     ))}
                     <th className="direita">Total</th>
@@ -316,7 +325,7 @@ export default function TicketsPage() {
                     <tr key={g.chave}>
                       <td className="forte">{g.cor || <span className="fraco">Sem cor cadastrada</span>}</td>
                       {tamanhos.map((t, i) => (
-                        <td key={i}>
+                        <td key={i} className={t === TAMANHO_UNICO ? "col-unico" : undefined}>
                           <input
                             type="number"
                             min={0}

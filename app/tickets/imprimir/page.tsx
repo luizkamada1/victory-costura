@@ -63,7 +63,7 @@ function Cabecalho({ t }: { t: Ticket }) {
       </div>
       <div className="cab-campo">
         <span>Tam.</span>
-        <b>{t.tamanho ?? "—"}</b>
+        <b className={(t.tamanho ?? "").length > 2 ? "cab-texto-longo" : undefined}>{t.tamanho ?? "—"}</b>
       </div>
       <div className="cab-campo">
         <span>Qtd.</span>
@@ -223,6 +223,7 @@ export default function ImprimirTicketsPage() {
         .cab-campo span { font-size: 7.5px; text-transform: uppercase; letter-spacing: .5px; color: #444; line-height: 1.2; }
         .cab-campo b { font-size: 16px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cab-cor b { font-size: 13px; }
+        .cab-campo b.cab-texto-longo { font-size: 11px; line-height: 1.45; }
         .cab-id b { font-size: 12px; }
         .cab-id small { font-size: 9px; font-weight: 400; color: #333; }
         .parte-titulo { margin-top: 2mm; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
