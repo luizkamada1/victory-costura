@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, Trash2, X } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
@@ -43,6 +44,7 @@ export default function ItensPage() {
   const [form, setForm] = useState<Form | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [criandoOperacao, setCriandoOperacao] = useState(false);
   const [ajustes, setAjustes] = useState<AjustesGrade>({ ...AJUSTES_PADRAO });
 
   async function carregar() {
@@ -278,6 +280,15 @@ export default function ItensPage() {
             </label>
           </div>
 
+          <div className="sequencias-topo">
+            <span className="campo">
+              <span>Sequência de operações</span>
+            </span>
+            <button type="button" className="botao botao-pequeno botao-contorno" onClick={() => setCriandoOperacao(true)}>
+              <Plus size={14} aria-hidden />
+              Criar operação
+            </button>
+          </div>
           <div className="sequencias">
             {form.partes.map((parte) => {
               const seq = form.sequencia[parte];
@@ -357,15 +368,28 @@ export default function ItensPage() {
                     rotulo={(o) => `${o.nome} · ${o.maquina ?? "sem máquina"} · ${min(o.tempo_minutos * fatorForm)} min`}
                     onAdicionar={(id) => mudarSequencia(parte, [...seq, id])}
                   />
-                  {operacoes.filter((o) => o.parte === parte).length === 0 && (
-                    <small className="fraco" style={{ display: "block", marginTop: 6 }}>
-                      Cadastre operações dessa parte em <a href="/operacoes">Operações</a>.
-                    </small>
-                  )}
                 </div>
               );
             })}
           </div>
+
+          {criandoOperacao && (
+            <ModalCriarOperacoes
+              partesDoItem={form.partes}
+              operacoes={operacoes}
+              onFechar={() => setCriandoOperacao(false)}
+              onCriadas={(novas) => {
+                setOperacoes((atual) => [...atual, ...novas]);
+                // cada uma entra no fim da sequência da sua parte (o item ainda precisa ser salvo)
+                setForm((f) => {
+                  if (!f) return f;
+                  const sequencia = { ...f.sequencia };
+                  for (const o of novas) if (f.partes.includes(o.parte)) sequencia[o.parte] = [...sequencia[o.parte], o.id];
+                  return { ...f, sequencia };
+                });
+              }}
+            />
+          )}
 
           <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
             <button type="submit" className="botao botao-primario" disabled={salvando}>
@@ -522,5 +546,231 @@ function BuscaOperacao({
         <small style={{ color: "var(--alerta)" }}>Nenhuma operação encontrada</small>
       )}
     </div>
+  );
+}
+
+type Rascunho = { chave: number; nome: string; tempo: string; maquina: string; parte: Parte };
+let proximoRascunho = 0;
+
+// Janela para criar operações novas sem sair do cadastro do item. Monta uma lista que pode ser
+// editada ou ter linhas excluídas; ao confirmar, cadastra todas em Operações e devolve as criadas.
+function ModalCriarOperacoes({
+  partesDoItem,
+  operacoes,
+  onFechar,
+  onCriadas,
+}: {
+  partesDoItem: Parte[];
+  operacoes: Operacao[];
+  onFechar: () => void;
+  onCriadas: (novas: Operacao[]) => void;
+}) {
+  const janela = useRef<HTMLDialogElement>(null);
+  const campoNome = useRef<HTMLInputElement>(null);
+  const [lista, setLista] = useState<Rascunho[]>([]);
+  const partePadrao: Parte = partesDoItem[0] ?? "superior";
+  const [rascunho, setRascunho] = useState<Rascunho>({ chave: 0, nome: "", tempo: "", maquina: "", parte: partePadrao });
+  const [editando, setEditando] = useState<number | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    janela.current?.showModal();
+  }, []);
+
+  const maquinas = Array.from(new Set(operacoes.map((o) => o.maquina).filter(Boolean))).sort() as string[];
+  const tempoNumero = (t: string) => Number(t.replace(",", "."));
+  const normal = (t: string) => t.trim().toLowerCase();
+
+  // confere o rascunho antes de pôr na lista
+  function validar(r: Rascunho) {
+    if (!r.nome.trim()) return "Informe o nome da operação.";
+    if (!(tempoNumero(r.tempo) > 0)) return "Informe o tempo Adulto, maior que zero (ex: 0,45).";
+    if (operacoes.some((o) => o.parte === r.parte && normal(o.nome) === normal(r.nome)))
+      return `Já existe a operação "${r.nome.trim()}" na ${NOME_PARTE[r.parte]}. Use a busca para adicioná-la.`;
+    if (lista.some((l) => l.chave !== r.chave && l.parte === r.parte && normal(l.nome) === normal(r.nome)))
+      return `"${r.nome.trim()}" já está na lista para a ${NOME_PARTE[r.parte]}.`;
+    return null;
+  }
+
+  function adicionarNaLista(e: React.FormEvent) {
+    e.preventDefault();
+    // não deixa o envio desta janela chegar ao formulário do item (que salvaria o item)
+    e.stopPropagation();
+    const problema = validar(rascunho);
+    if (problema) {
+      setErro(problema);
+      return;
+    }
+    setErro(null);
+    if (editando !== null) setLista((l) => l.map((x) => (x.chave === editando ? { ...rascunho, chave: editando } : x)));
+    else setLista((l) => [...l, { ...rascunho, chave: ++proximoRascunho }]);
+    setEditando(null);
+    // mantém parte e máquina para agilizar operações em sequência
+    setRascunho({ chave: 0, nome: "", tempo: "", maquina: rascunho.maquina, parte: rascunho.parte });
+    campoNome.current?.focus();
+  }
+
+  function editar(r: Rascunho) {
+    setEditando(r.chave);
+    setRascunho(r);
+    setErro(null);
+    campoNome.current?.focus();
+  }
+
+  function excluir(chave: number) {
+    setLista((l) => l.filter((x) => x.chave !== chave));
+    if (editando === chave) {
+      setEditando(null);
+      setRascunho({ chave: 0, nome: "", tempo: "", maquina: "", parte: partePadrao });
+    }
+  }
+
+  async function confirmar() {
+    if (!lista.length) return;
+    setErro(null);
+    setSalvando(true);
+    const criadas: Operacao[] = [];
+    try {
+      for (const r of lista) {
+        const resposta = await api<{ id: number }>("/api/operacoes", {
+          method: "POST",
+          body: JSON.stringify({ nome: r.nome.trim(), tempo_minutos: tempoNumero(r.tempo), maquina: r.maquina.trim(), parte: r.parte }),
+        });
+        criadas.push({
+          id: resposta.id,
+          nome: r.nome.trim(),
+          tempo_minutos: tempoNumero(r.tempo),
+          maquina: r.maquina.trim() || null,
+          parte: r.parte,
+        });
+      }
+      onCriadas(criadas);
+      janela.current?.close();
+    } catch (e) {
+      // as que já foram criadas entram no item; as que faltaram continuam na lista
+      if (criadas.length) {
+        onCriadas(criadas);
+        setLista((l) => l.slice(criadas.length));
+      }
+      setErro(mensagemErro(e));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  // fica fora do formulário do item na página (um formulário não pode ficar dentro de outro)
+  return createPortal(
+    <dialog ref={janela} className="modal modal-largo" onClose={onFechar}>
+      <div className="modal-conteudo">
+        <div className="modal-cabecalho">
+          <div>
+            <h2>Criar operações</h2>
+            <p className="bloco-descricao">
+              Monte a lista e confirme. As operações entram no cadastro e na sequência da parte escolhida no item.
+            </p>
+          </div>
+          <button type="button" className="botao botao-pequeno botao-icone botao-fantasma" onClick={() => janela.current?.close()} aria-label="Fechar">
+            <X size={16} aria-hidden />
+          </button>
+        </div>
+
+        <form className="campos grade-criar-op" onSubmit={adicionarNaLista}>
+          <label className="campo">
+            <span>Nome da operação</span>
+            <input ref={campoNome} autoFocus className="entrada" value={rascunho.nome} onChange={(e) => setRascunho({ ...rascunho, nome: e.target.value })} />
+          </label>
+          <label className="campo">
+            <span>Tempo Adulto</span>
+            <div className="entrada-sufixo">
+              <input
+                className="entrada num"
+                inputMode="decimal"
+                placeholder="0,45"
+                value={rascunho.tempo}
+                onChange={(e) => setRascunho({ ...rascunho, tempo: e.target.value.replace(/[^\d.,]/g, "") })}
+              />
+              <span>min</span>
+            </div>
+          </label>
+          <label className="campo">
+            <span>Máquina</span>
+            <input className="entrada" list="maquinas-modal" value={rascunho.maquina} onChange={(e) => setRascunho({ ...rascunho, maquina: e.target.value })} />
+            <datalist id="maquinas-modal">
+              {maquinas.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          </label>
+          <label className="campo">
+            <span>Parte</span>
+            <select className="entrada" value={rascunho.parte} onChange={(e) => setRascunho({ ...rascunho, parte: e.target.value as Parte })}>
+              {(partesDoItem.length ? partesDoItem : PARTES).map((p) => (
+                <option key={p} value={p}>
+                  {NOME_PARTE[p].replace("Parte ", "")}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="botao botao-contorno">
+            {editando !== null ? (
+              <>
+                <Check size={15} aria-hidden />
+                Salvar alteração
+              </>
+            ) : (
+              <>
+                <Plus size={15} aria-hidden />
+                Adicionar à lista
+              </>
+            )}
+          </button>
+        </form>
+
+        {erro && (
+          <div style={{ marginTop: 12 }}>
+            <Aviso tipo="erro">{erro}</Aviso>
+          </div>
+        )}
+
+        {lista.length === 0 ? (
+          <div className="vazio" style={{ marginTop: 8 }}>
+            Nenhuma operação na lista ainda.
+          </div>
+        ) : (
+          <ul className="modal-lista" style={{ marginTop: 14 }}>
+            {lista.map((r) => (
+              <li key={r.chave}>
+                <div className="linha-rascunho" data-marcada={editando === r.chave}>
+                  <span className={`selo selo-${r.parte}`}>{NOME_PARTE[r.parte].replace("Parte ", "")}</span>
+                  <span className="forte">{r.nome}</span>
+                  <span className="fraco">{r.maquina || "sem máquina"}</span>
+                  <span className="num">{tempoNumero(r.tempo).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} min</span>
+                  <span className="acoes">
+                    <button type="button" className="botao botao-pequeno botao-icone botao-fantasma" onClick={() => editar(r)} aria-label={`Editar ${r.nome}`} title="Editar">
+                      <Pencil size={14} aria-hidden />
+                    </button>
+                    <button type="button" className="botao botao-pequeno botao-icone botao-perigo" onClick={() => excluir(r.chave)} aria-label={`Excluir ${r.nome}`} title="Excluir">
+                      <Trash2 size={14} aria-hidden />
+                    </button>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="modal-rodape">
+          <button type="button" className="botao botao-contorno" onClick={() => janela.current?.close()}>
+            Cancelar
+          </button>
+          <button type="button" className="botao botao-primario" disabled={!lista.length || salvando} onClick={confirmar}>
+            <Check size={16} aria-hidden />
+            {salvando ? "Criando…" : lista.length ? `Confirmar ${lista.length} ${lista.length === 1 ? "operação" : "operações"}` : "Confirmar"}
+          </button>
+        </div>
+      </div>
+    </dialog>,
+    document.body
   );
 }

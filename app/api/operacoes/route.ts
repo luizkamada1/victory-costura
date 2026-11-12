@@ -34,11 +34,14 @@ export async function POST(req: NextRequest) {
 
     const linha = { nome, tempo_minutos: tempo, maquina: String(body.maquina ?? "").trim() || null, parte };
     const supabase = getSupabaseServer();
-    const { error } = body.id
-      ? await supabase.from("operacoes").update(linha).eq("id", body.id)
-      : await supabase.from("operacoes").insert(linha);
+    if (body.id) {
+      const { error } = await supabase.from("operacoes").update(linha).eq("id", body.id);
+      if (error) throw error;
+      return NextResponse.json({ ok: true, id: Number(body.id) });
+    }
+    const { data, error } = await supabase.from("operacoes").insert(linha).select("id").single();
     if (error) throw error;
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, id: data.id });
   } catch (err) {
     return respostaErro(err);
   }

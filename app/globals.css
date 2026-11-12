@@ -1157,13 +1157,21 @@ input[type="checkbox"] {
   gap: 6px;
 }
 
+.sequencias-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--regua);
+}
+
 .sequencias {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 16px;
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--regua);
+  margin-top: 12px;
 }
 
 .sequencia {
@@ -1458,7 +1466,7 @@ input[type="checkbox"] {
 }
 
 .entrada-sufixo .entrada {
-  padding-right: 30px;
+  padding-right: 42px;
 }
 
 .entrada-sufixo > span {
@@ -1675,4 +1683,92 @@ input[type="number"]::-webkit-inner-spin-button {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
+}
+
+/* título de bloco que recolhe e abre o conteúdo */
+.titulo-recolhivel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px -8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--raio);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.titulo-recolhivel svg {
+  flex-shrink: 0;
+  color: var(--tinta-3);
+  transition: transform 200ms var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .titulo-recolhivel:hover {
+    background: var(--rosa-fundo);
+  }
+}
+
+/* itens: janela para criar operações sem sair do cadastro */
+.modal-largo {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.grade-criar-op {
+  grid-template-columns: 1fr 1.3fr auto;
+  grid-template-areas:
+    "nome nome parte"
+    "tempo maquina botao";
+  align-items: end;
+}
+
+.grade-criar-op > :nth-child(1) {
+  grid-area: nome;
+}
+
+.grade-criar-op > :nth-child(2) {
+  grid-area: tempo;
+}
+
+.grade-criar-op > :nth-child(3) {
+  grid-area: maquina;
+}
+
+.grade-criar-op > :nth-child(4) {
+  grid-area: parte;
+  min-width: 150px;
+}
+
+.grade-criar-op > :nth-child(5) {
+  grid-area: botao;
+}
+
+.linha-rascunho {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--regua);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.linha-rascunho[data-marcada="true"] {
+  background: var(--rosa-claro);
+}
+
+@media (max-width: 640px) {
+  .grade-criar-op {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "nome nome"
+      "tempo parte"
+      "maquina maquina"
+      "botao botao";
+  }
 }

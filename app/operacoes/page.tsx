@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import { AJUSTES_PADRAO, AjustesGrade, GRADES, NOME_PARTE, Operacao, PARTES, Parte, fatorGrade } from "@/lib/producao";
@@ -142,8 +142,6 @@ export default function OperacoesPage() {
         </div>
       </form>
 
-      <AjustesPorGrade ajustes={ajustes} onSalvo={setAjustes} />
-
       {PARTES.map((parte) => (
         <TabelaParte
           ajustes={ajustes}
@@ -155,6 +153,8 @@ export default function OperacoesPage() {
           onExcluir={excluir}
         />
       ))}
+
+      <AjustesPorGrade ajustes={ajustes} onSalvo={setAjustes} />
     </ProducaoLayout>
   );
 }
@@ -174,6 +174,7 @@ function TabelaParte({
   onEditar: (o: Operacao) => void;
   onExcluir: (o: Operacao) => void;
 }) {
+  const [aberta, setAberta] = useState(true);
   const tabela = useTabela<Operacao>(
     operacoes,
     [
@@ -196,13 +197,13 @@ function TabelaParte({
 
   return (
     <section className="bloco">
-      <div className="bloco-cabecalho">
-        <h2>
+      <div className="bloco-cabecalho" style={aberta ? undefined : { marginBottom: 0 }}>
+        <TituloRecolhivel aberto={aberta} onAlternar={() => setAberta((v) => !v)}>
           {NOME_PARTE[parte]}
           <span className="contagem">{operacoes.length}</span>
-        </h2>
+        </TituloRecolhivel>
       </div>
-      {operacoes.length === 0 ? (
+      {!aberta ? null : operacoes.length === 0 ? (
         <div className="vazio">
           <strong>Nenhuma operação da {NOME_PARTE[parte].toLowerCase()}</strong>
           Cadastre acima escolhendo &quot;{NOME_PARTE[parte]}&quot; no campo Parte.
@@ -251,6 +252,7 @@ function TabelaParte({
 
 // Percentual sobre o tempo cadastrado (grade Adulto) aplicado a cada grade ao gerar tickets
 function AjustesPorGrade({ ajustes, onSalvo }: { ajustes: AjustesGrade; onSalvo: (a: AjustesGrade) => void }) {
+  const [aberto, setAberto] = useState(false);
   const [valores, setValores] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
   const [retorno, setRetorno] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
@@ -279,18 +281,27 @@ function AjustesPorGrade({ ajustes, onSalvo }: { ajustes: AjustesGrade; onSalvo:
 
   return (
     <form className="bloco" onSubmit={salvar}>
-      <div className="bloco-cabecalho">
+      <div className="bloco-cabecalho" style={aberto ? undefined : { marginBottom: 0 }}>
         <div>
-          <h2>Ajuste de tempo por grade</h2>
+          <TituloRecolhivel aberto={aberto} onAlternar={() => setAberto((v) => !v)}>
+            Ajuste de tempo por grade
+          </TituloRecolhivel>
           <p className="bloco-descricao">
-            O tempo cadastrado vale para a grade Adulto. As outras grades somam ou tiram este percentual ao gerar os
-            tickets. Tickets já gerados não mudam.
+            {aberto
+              ? "O tempo cadastrado vale para a grade Adulto. As outras grades somam ou tiram este percentual ao gerar os tickets. Tickets já gerados não mudam."
+              : Object.keys(GRADES)
+                  .filter((g) => g !== "Adulto")
+                  .map((g) => `${g} ${(ajustes[g] ?? 0) > 0 ? "+" : ""}${String(ajustes[g] ?? 0).replace(".", ",")}%`)
+                  .join(" · ")}
           </p>
         </div>
-        <button type="submit" className="botao botao-primario" disabled={salvando}>
-          {salvando ? "Salvando…" : "Salvar ajustes"}
-        </button>
+        {aberto && (
+          <button type="submit" className="botao botao-primario" disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar ajustes"}
+          </button>
+        )}
       </div>
+      {aberto && (
       <div className="campos grade-ajustes">
         {Object.keys(GRADES).map((g) => (
           <label key={g} className="campo">
@@ -309,11 +320,22 @@ function AjustesPorGrade({ ajustes, onSalvo }: { ajustes: AjustesGrade; onSalvo:
           </label>
         ))}
       </div>
+      )}
       {retorno && (
         <div style={{ marginTop: 12 }}>
           <Aviso tipo={retorno.tipo}>{retorno.texto}</Aviso>
         </div>
       )}
     </form>
+  );
+}
+
+// Título de bloco que abre e fecha o conteúdo ao clicar
+function TituloRecolhivel({ aberto, onAlternar, children }: { aberto: boolean; onAlternar: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" className="titulo-recolhivel" onClick={onAlternar} aria-expanded={aberto}>
+      <ChevronDown size={18} aria-hidden style={{ transform: aberto ? "none" : "rotate(-90deg)" }} />
+      <h2>{children}</h2>
+    </button>
   );
 }
