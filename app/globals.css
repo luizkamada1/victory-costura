@@ -1539,7 +1539,26 @@ input[type="checkbox"] {
   }
 }
 
-/* tickets: coluna "Único" (a cor inteira num ticket só) destacada das colunas de tamanho */
-.grade-quantidades .col-unico {
-  background: var(--rosa-fundo);
+/* tickets: título "Único" (a cor inteira num ticket só) em rosa; a linha da cor fica rosa sob o mouse */
+.grade-quantidades th.col-unico {
+  color: var(--rosa-escuro);
+  font-weight: 600;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .grade-quantidades tbody tr:hover {
+    background: var(--rosa-claro);
+  }
+}
+
+/* campos de número sem as setinhas: a pessoa digita o valor */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }

@@ -137,8 +137,15 @@ export default function TicketsPage() {
     setGrupos(novo?.cores.length ? novo.cores.map(novoGrupo) : [novoGrupo("")]);
   }
 
+  // Com quantidade no Único, a cor vai inteira num ticket só: os tamanhos dela são apagados e ficam bloqueados
   function mudarQuantidade(chave: number, tamanho: string, valor: string) {
-    setGrupos((atual) => atual.map((g) => (g.chave === chave ? { ...g, qtd: { ...g.qtd, [tamanho]: valor } } : g)));
+    setGrupos((atual) =>
+      atual.map((g) => {
+        if (g.chave !== chave) return g;
+        if (tamanho === TAMANHO_UNICO && Number(valor) > 0) return { ...g, qtd: { [TAMANHO_UNICO]: valor } };
+        return { ...g, qtd: { ...g.qtd, [tamanho]: valor } };
+      })
+    );
   }
 
   // imprimirAgora = false gera e deixa os tickets marcados na lista, para imprimir vários juntos depois
@@ -326,13 +333,20 @@ export default function TicketsPage() {
                       <td className="forte">{g.cor || <span className="fraco">Sem cor cadastrada</span>}</td>
                       {tamanhos.map((t, i) => (
                         <td key={i} className={t === TAMANHO_UNICO ? "col-unico" : undefined}>
+                          {/* texto só com números: sem setinhas e sem a rodinha do mouse mudar o valor */}
                           <input
-                            type="number"
-                            min={0}
+                            inputMode="numeric"
+                            autoComplete="off"
                             className="entrada num qtd"
                             aria-label={`${g.cor || "Cor"}, tamanho ${t}`}
                             value={g.qtd[t] ?? ""}
-                            onChange={(e) => mudarQuantidade(g.chave, t, e.target.value)}
+                            disabled={t !== TAMANHO_UNICO && Number(g.qtd[TAMANHO_UNICO]) > 0}
+                            title={
+                              t !== TAMANHO_UNICO && Number(g.qtd[TAMANHO_UNICO]) > 0
+                                ? "Bloqueado: esta cor vai inteira no Único"
+                                : undefined
+                            }
+                            onChange={(e) => mudarQuantidade(g.chave, t, e.target.value.replace(/\D/g, ""))}
                           />
                         </td>
                       ))}
