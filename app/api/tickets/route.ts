@@ -183,22 +183,43 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// ?id=123 → exclui um ticket; ?ids=1,2,3 → exclui vários.
+// Tickets com cupons já apontados nunca são excluídos (a produção registrada se perderia):
+// com um só, a resposta é um erro; com vários, eles são pulados e voltam em "bloqueados".
 export async function DELETE(req: NextRequest) {
   try {
-    const id = Number(req.nextUrl.searchParams.get("id"));
+    const varios = req.nextUrl.searchParams.get("ids");
+    const ids = (varios ?? req.nextUrl.searchParams.get("id") ?? "")
+      .split(",")
+      .map(Number)
+      .filter((n) => n > 0);
+    if (ids.length === 0) return respostaErro(new Error("Nenhum ticket informado"), 400);
+
     const supabase = getSupabaseServer();
-    const { count, error: erroContagem } = await supabase
-      .from("ticket_operacoes")
-      .select("id", { count: "exact", head: true })
-      .eq("ticket_id", id)
-      .not("costureira_id", "is", null);
-    if (erroContagem) throw erroContagem;
-    if (count) {
+    const comApontamento = new Set<number>();
+    for (const bloco of emBlocos(ids)) {
+      const apontados = await buscarTodos((de, ate) =>
+        supabase
+          .from("ticket_operacoes")
+          .select("ticket_id")
+          .in("ticket_id", bloco)
+          .not("costureira_id", "is", null)
+          .order("id")
+          .range(de, ate)
+      );
+      for (const a of apontados) comApontamento.add(a.ticket_id);
+    }
+
+    if (!varios && comApontamento.size) {
       return respostaErro(new Error("Esse ticket já tem operações apontadas. Desfaça os apontamentos antes."), 400);
     }
-    const { error } = await supabase.from("tickets").delete().eq("id", id);
-    if (error) throw error;
-    return NextResponse.json({ ok: true });
+
+    const excluir = ids.filter((id) => !comApontamento.has(id));
+    for (const bloco of emBlocos(excluir)) {
+      const { error } = await supabase.from("tickets").delete().in("id", bloco);
+      if (error) throw error;
+    }
+    return NextResponse.json({ ok: true, excluidos: excluir, bloqueados: Array.from(comApontamento) });
   } catch (err) {
     return respostaErro(err);
   }

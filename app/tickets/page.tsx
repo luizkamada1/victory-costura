@@ -41,6 +41,7 @@ export default function TicketsPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
   const [gerados, setGerados] = useState<number | null>(null);
+  const [avisoLista, setAvisoLista] = useState<{ tipo: "ok" | "alerta"; texto: string } | null>(null);
   const [ajustes, setAjustes] = useState<AjustesGrade>({ ...AJUSTES_PADRAO });
 
   // formulário de geração
@@ -192,6 +193,57 @@ export default function TicketsPage() {
     try {
       await api(`/api/tickets?id=${t.id}`, { method: "DELETE" });
       await carregarTickets(buscaOp);
+    } catch (e) {
+      setErro(mensagemErro(e));
+    }
+  }
+
+  // Exclui os selecionados depois de confirmar. Os que têm cupons apontados nunca são excluídos.
+  async function excluirSelecionados() {
+    const escolhidos = tickets.filter((t) => selecionados.has(t.id));
+    if (!escolhidos.length) return;
+    const comApontamento = escolhidos.filter((t) => apontadas(t) > 0);
+    const podem = escolhidos.filter((t) => apontadas(t) === 0);
+    if (!podem.length) {
+      alert(
+        `Nenhum dos tickets selecionados pode ser excluído: todos têm cupons já apontados (${comApontamento
+          .map((t) => `#${t.id}`)
+          .join(", ")}). Desfaça os apontamentos antes.`
+      );
+      return;
+    }
+    const ops = Array.from(new Set(podem.map((t) => t.op)));
+    const impressos = podem.filter((t) => t.impresso_em).length;
+    const linhas = [
+      `Excluir ${podem.length} ${podem.length === 1 ? "ticket" : "tickets"} (${ops.length === 1 ? "OP" : "OPs"} ${ops.join(", ")})?`,
+      "",
+      impressos
+        ? `• ${impressos} ${impressos === 1 ? "já foi impresso" : "já foram impressos"}: os cupons impressos deixam de valer e não poderão ser apontados.`
+        : "",
+      comApontamento.length
+        ? `• ${comApontamento.length} ${comApontamento.length === 1 ? "tem" : "têm"} cupons apontados e não ${comApontamento.length === 1 ? "será excluído" : "serão excluídos"} (${comApontamento.map((t) => `#${t.id}`).join(", ")}).`
+        : "",
+      "",
+      "Essa ação não pode ser desfeita.",
+    ].filter((l, i, todas) => l !== "" || (i > 0 && todas[i - 1] !== ""));
+    if (!confirm(linhas.join("\n"))) return;
+
+    setErro(null);
+    setAvisoLista(null);
+    try {
+      const r = await api<{ excluidos: number[]; bloqueados: number[] }>(
+        `/api/tickets?ids=${escolhidos.map((t) => t.id).join(",")}`,
+        { method: "DELETE" }
+      );
+      await carregarTickets(buscaOp);
+      setAvisoLista({
+        tipo: r.bloqueados.length ? "alerta" : "ok",
+        texto:
+          `${r.excluidos.length} ${r.excluidos.length === 1 ? "ticket excluído" : "tickets excluídos"}.` +
+          (r.bloqueados.length
+            ? ` ${r.bloqueados.length} não ${r.bloqueados.length === 1 ? "foi excluído" : "foram excluídos"} por ter cupons apontados (${r.bloqueados.map((id) => `#${id}`).join(", ")}).`
+            : ""),
+      });
     } catch (e) {
       setErro(mensagemErro(e));
     }
@@ -435,6 +487,12 @@ export default function TicketsPage() {
               </button>
             )}
             {selecionados.size > 0 && (
+              <button type="button" className="botao botao-contorno botao-excluir" onClick={excluirSelecionados}>
+                <Trash2 size={16} aria-hidden />
+                Excluir {selecionados.size}
+              </button>
+            )}
+            {selecionados.size > 0 && (
               <button type="button" className="botao botao-primario" onClick={() => imprimir(Array.from(selecionados))}>
                 <Printer size={16} aria-hidden />
                 Imprimir {selecionados.size}
@@ -457,6 +515,7 @@ export default function TicketsPage() {
         <p className="bloco-descricao" style={{ margin: "-6px 0 12px" }}>
           {buscaOp.trim() ? `Tickets da OP ${buscaOp.trim()}.` : "Os 200 tickets mais recentes."} Clique numa linha para ver quem fez cada operação.
         </p>
+        {avisoLista && <Aviso tipo={avisoLista.tipo}>{avisoLista.texto}</Aviso>}
         {tickets.length === 0 ? (
           <div className="vazio">
             <strong>Nenhum ticket encontrado</strong>

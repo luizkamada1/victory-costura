@@ -1562,3 +1562,15 @@ input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+.botao-excluir {
+  color: var(--erro);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .botao-contorno.botao-excluir:hover:not(:disabled) {
+    background: var(--erro-claro);
+    border-color: #f3b9b3;
+    color: var(--erro);
+  }
+}
