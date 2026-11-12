@@ -13,6 +13,7 @@ type Form = {
   grades: string[];
   tamanhos: string;
   cores: string;
+  colecao: string;
   partes: Parte[];
   sequencia: Record<Parte, number[]>;
 };
@@ -23,6 +24,7 @@ const VAZIO: Form = {
   grades: [],
   tamanhos: "",
   cores: "",
+  colecao: "",
   partes: ["superior", "inferior"],
   sequencia: { superior: [], inferior: [] },
 };
@@ -76,6 +78,7 @@ export default function ItensPage() {
       grades: item.grades,
       tamanhos: item.tamanhos.join(", "),
       cores: item.cores.join(", "),
+      colecao: item.colecao ?? "",
       partes: item.partes,
       sequencia,
     });
@@ -119,6 +122,7 @@ export default function ItensPage() {
           grades: form.grades,
           tamanhos: separar(form.tamanhos),
           cores: separar(form.cores),
+          colecao: form.colecao,
           partes: form.partes,
           operacoes: form.partes.flatMap((p) => form.sequencia[p]),
         }),
@@ -145,12 +149,14 @@ export default function ItensPage() {
   // tempos mostrados já com o ajuste da grade do item (o cadastrado é o da grade Adulto)
   const fatorForm = form ? fatorGrade(form.grades, ajustes) : 1;
   const tempoParte = (ids: number[]) => ids.reduce((s, id) => s + (porId.get(id)?.tempo_minutos ?? 0), 0) * fatorForm;
+  const colecoes = Array.from(new Set(itens.map((i) => i.colecao).filter(Boolean))).sort() as string[];
   const opsDoItem = (item: Item) => item.operacoes.map((v) => porId.get(v.operacao_id)).filter(Boolean) as Operacao[];
   const tabela = useTabela<Item>(
     itens,
     [
       { id: "referencia", titulo: "Ref.", valor: (i) => i.referencia },
       { id: "nome", titulo: "Nome", valor: (i) => i.nome },
+      { id: "colecao", titulo: "Coleção", valor: (i) => i.colecao ?? "" },
       { id: "grade", titulo: "Grade e tamanhos", valor: (i) => i.grades.join(", "), texto: (i) => `${i.grades.join(", ")} ${i.tamanhos.join(" ")}` },
       { id: "cores", titulo: "Cores", valor: (i) => i.cores.join(", ") },
       {
@@ -203,6 +209,21 @@ export default function ItensPage() {
                 value={form.nome}
                 onChange={(e) => setForm({ ...form, nome: e.target.value })}
               />
+            </label>
+            <label className="campo">
+              <span>Coleção</span>
+              <input
+                className="entrada"
+                list="lista-colecoes"
+                placeholder="Inverno 2027"
+                value={form.colecao}
+                onChange={(e) => setForm({ ...form, colecao: e.target.value })}
+              />
+              <datalist id="lista-colecoes">
+                {colecoes.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </label>
           </div>
 
@@ -330,19 +351,12 @@ export default function ItensPage() {
                       })}
                     </ol>
                   )}
-                  <select
-                    className="entrada"
-                    value=""
-                    aria-label={`Adicionar operação à ${NOME_PARTE[parte]}`}
-                    onChange={(e) => e.target.value && mudarSequencia(parte, [...seq, Number(e.target.value)])}
-                  >
-                    <option value="">Adicionar operação…</option>
-                    {disponiveis.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.nome} ({o.maquina ?? "sem máquina"}, {min(o.tempo_minutos * fatorForm)} min)
-                      </option>
-                    ))}
-                  </select>
+                  <BuscaOperacao
+                    parte={parte}
+                    disponiveis={disponiveis}
+                    rotulo={(o) => `${o.nome} · ${o.maquina ?? "sem máquina"} · ${min(o.tempo_minutos * fatorForm)} min`}
+                    onAdicionar={(id) => mudarSequencia(parte, [...seq, id])}
+                  />
                   {operacoes.filter((o) => o.parte === parte).length === 0 && (
                     <small className="fraco" style={{ display: "block", marginTop: 6 }}>
                       Cadastre operações dessa parte em <a href="/operacoes">Operações</a>.
@@ -386,6 +400,7 @@ export default function ItensPage() {
                     <tr key={item.id} data-selecionada={form?.id === item.id}>
                       <td className="forte num">{item.referencia}</td>
                       <td className="quebra">{item.nome}</td>
+                      <td className="quebra" style={{ fontSize: 13 }}>{item.colecao || <span className="fraco">—</span>}</td>
                       <td>
                         <div>{item.grades.join(", ") || <span className="fraco">—</span>}</div>
                         <div className="fraco" style={{ fontSize: 12 }}>
@@ -456,5 +471,56 @@ export default function ItensPage() {
         )}
       </section>
     </ProducaoLayout>
+  );
+}
+
+// Campo de busca para incluir uma operação na sequência: digitar parte do nome ou da máquina
+// filtra as sugestões; ao escolher uma (ou digitar o nome exato), ela entra na lista e o campo limpa.
+function BuscaOperacao({
+  parte,
+  disponiveis,
+  rotulo,
+  onAdicionar,
+}: {
+  parte: Parte;
+  disponiveis: Operacao[];
+  rotulo: (o: Operacao) => string;
+  onAdicionar: (id: number) => void;
+}) {
+  const [texto, setTexto] = useState("");
+  const termo = texto.trim().toLowerCase();
+
+  function digitar(valor: string) {
+    setTexto(valor);
+    const limpo = valor.trim().toLowerCase();
+    if (!limpo) return;
+    const porRotulo = disponiveis.find((o) => rotulo(o).toLowerCase() === limpo);
+    const porNome = disponiveis.filter((o) => o.nome.toLowerCase() === limpo);
+    const achada = porRotulo ?? (porNome.length === 1 ? porNome[0] : undefined);
+    if (achada) {
+      onAdicionar(achada.id);
+      setTexto("");
+    }
+  }
+
+  return (
+    <div className="campo">
+      <input
+        className="entrada"
+        list={`operacoes-${parte}`}
+        placeholder="Adicionar operação: digite o nome ou a máquina"
+        aria-label={`Adicionar operação à ${NOME_PARTE[parte]}`}
+        value={texto}
+        onChange={(e) => digitar(e.target.value)}
+      />
+      <datalist id={`operacoes-${parte}`}>
+        {disponiveis.map((o) => (
+          <option key={o.id} value={rotulo(o)} />
+        ))}
+      </datalist>
+      {termo && !disponiveis.some((o) => rotulo(o).toLowerCase().includes(termo)) && (
+        <small style={{ color: "var(--alerta)" }}>Nenhuma operação encontrada</small>
+      )}
+    </div>
   );
 }

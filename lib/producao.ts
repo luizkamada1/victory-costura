@@ -56,6 +56,7 @@ export type Item = {
   tamanhos: string[];
   cores: string[];
   partes: Parte[];
+  colecao?: string | null; // ausente enquanto o campo não existir no banco
   operacoes: ItemOperacao[];
 };
 

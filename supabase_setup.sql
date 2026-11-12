@@ -116,3 +116,6 @@ alter table ajustes_grade enable row level security;
 
 -- Quando o ticket foi impresso pela primeira vez (null = ainda não impresso)
 alter table tickets add column if not exists impresso_em timestamptz;
+
+-- Coleção do item (ex: Inverno 2027)
+alter table itens add column if not exists colecao text;

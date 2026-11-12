@@ -157,7 +157,7 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
                     style={filtrosAtivos ? { background: "var(--rosa-claro)", color: "var(--rosa-escuro)" } : undefined}
                   >
                     <ListFilter size={14} aria-hidden />
-                    {mostrarFiltros ? "Ocultar filtros" : "Filtrar"}
+                    {mostrarFiltros ? "Ocultar" : "Filtrar"}
                     {filtrosAtivos ? ` · ${filtrosAtivos}` : ""}
                   </button>
                 )}

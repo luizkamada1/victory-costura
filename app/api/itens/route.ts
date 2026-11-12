@@ -6,6 +6,8 @@ import { PARTES } from "@/lib/producao";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const CAMPOS_ITEM = "id, referencia, nome, grades, tamanhos, cores, partes";
+
 function limparLista(valor: unknown): string[] {
   if (!Array.isArray(valor)) return [];
   const vistos = new Set<string>();
@@ -21,8 +23,9 @@ export async function GET() {
     const supabase = getSupabaseServer();
     // Os vínculos passam de 1.000 linhas com poucas dezenas de itens; sem paginar, o Supabase
     // cortaria a lista e um item salvo depois perderia as operações que não vieram.
-    const [{ data: itens, error }, vinculos] = await Promise.all([
-      supabase.from("itens").select("id, referencia, nome, grades, tamanhos, cores, partes").order("referencia"),
+    const buscarItens = (campos: string) => supabase.from("itens").select(campos).order("referencia");
+    const [respostaItens, vinculos] = await Promise.all([
+      buscarItens(`${CAMPOS_ITEM}, colecao`),
       buscarTodos((de, ate) =>
         supabase
           .from("item_operacoes")
@@ -33,7 +36,11 @@ export async function GET() {
           .range(de, ate)
       ),
     ]);
+    let { data: itensBrutos, error } = respostaItens;
+    // enquanto o campo colecao não for criado no banco, a lista funciona sem ele
+    if (error && error.code === "42703") ({ data: itensBrutos, error } = await buscarItens(CAMPOS_ITEM));
     if (error) throw error;
+    const itens = itensBrutos as unknown as { id: number }[] | null;
 
     const porItem = new Map<number, { operacao_id: number; ordem: number }[]>();
     for (const v of vinculos) {
@@ -65,23 +72,33 @@ export async function POST(req: NextRequest) {
       tamanhos: limparLista(body.tamanhos),
       cores: limparLista(body.cores),
       partes: limparLista(body.partes).filter((p) => (PARTES as string[]).includes(p)),
+      colecao: String(body.colecao ?? "").trim() || null,
     };
     if (linha.partes.length === 0) return respostaErro(new Error("Informe ao menos uma parte"), 400);
     if (linha.grades.length > 1) return respostaErro(new Error("Um item só pode ter uma grade"), 400);
 
     const supabase = getSupabaseServer();
-    let itemId: number = body.id;
-    if (itemId) {
-      const { error } = await supabase.from("itens").update(linha).eq("id", itemId);
-      if (error) throw error;
-    } else {
-      const { data, error } = await supabase.from("itens").insert(linha).select("id").single();
-      if (error) {
-        if (error.code === "23505") return respostaErro(new Error(`A referência ${referencia} já existe`), 400);
-        throw error;
+    // Enquanto o campo colecao não existir no banco: salva sem ele, mas avisa se a coleção foi preenchida
+    const gravar = async (dados: Record<string, unknown>) =>
+      body.id
+        ? { ...(await supabase.from("itens").update(dados).eq("id", body.id)), data: { id: Number(body.id) } }
+        : await supabase.from("itens").insert(dados).select("id").single();
+    let resultado = await gravar(linha);
+    if (resultado.error?.code === "42703") {
+      if (linha.colecao) {
+        return respostaErro(
+          new Error("O campo Coleção ainda não existe no banco. Rode o trecho novo do supabase_setup.sql no Supabase."),
+          400
+        );
       }
-      itemId = data.id;
+      const { colecao: _ignorar, ...semColecao } = linha;
+      resultado = await gravar(semColecao);
     }
+    if (resultado.error) {
+      if (resultado.error.code === "23505") return respostaErro(new Error(`A referência ${referencia} já existe`), 400);
+      throw resultado.error;
+    }
+    const itemId: number = (resultado.data as { id: number }).id;
 
     const operacoes: number[] = Array.isArray(body.operacoes) ? body.operacoes.map(Number) : [];
     const { error: erroApagar } = await supabase.from("item_operacoes").delete().eq("item_id", itemId);
