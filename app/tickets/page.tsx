@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
-import { ChevronRight, FilePlus2, Printer, Search, Trash2 } from "lucide-react";
+import { Fragment, forwardRef, useEffect, useRef, useState } from "react";
+import { Check, ChevronRight, FilePlus2, Printer, Search, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import {
@@ -41,6 +41,8 @@ export default function TicketsPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
   const [gerados, setGerados] = useState<number | null>(null);
+  const [ticketCupons, setTicketCupons] = useState<{ id: number; vez: number } | null>(null);
+  const blocoCupons = useRef<HTMLElement>(null);
   const [avisoLista, setAvisoLista] = useState<{ tipo: "ok" | "alerta"; texto: string } | null>(null);
   const [ajustes, setAjustes] = useState<AjustesGrade>({ ...AJUSTES_PADRAO });
 
@@ -465,6 +467,12 @@ export default function TicketsPage() {
         )}
       </form>
 
+      <CuponsAvulsos
+        ref={blocoCupons}
+        inicial={ticketCupons}
+        onImpresso={() => carregarTickets(buscaOp, selecionados)}
+      />
+
       <section className="bloco">
         <div className="bloco-cabecalho">
           <h2>
@@ -620,6 +628,18 @@ export default function TicketsPage() {
                         <tr className="detalhe">
                           <td colSpan={10} style={{ padding: "8px 20px 16px" }}>
                             <OperacoesDoTicket operacoes={t.operacoes} nomeCostureira={nomeCostureira} />
+                            <button
+                              type="button"
+                              className="botao botao-pequeno botao-contorno"
+                              style={{ marginTop: 10 }}
+                              onClick={() => {
+                                setTicketCupons({ id: t.id, vez: Date.now() });
+                                blocoCupons.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                              }}
+                            >
+                              <Printer size={14} aria-hidden />
+                              Imprimir cupons deste ticket
+                            </button>
                           </td>
                         </tr>
                       )}
@@ -702,3 +722,205 @@ function OperacoesDoTicket({
     </>
   );
 }
+
+type OperacaoDoItem = {
+  operacao_id: number;
+  nome: string;
+  maquina: string | null;
+  parte: Parte;
+  ordem: number;
+  tempo_minutos: number;
+  cupom_id: number | null;
+  apontado: boolean;
+};
+type DadosCupons = {
+  ticket: { id: number; op: string; referencia: string; cor: string | null; tamanho: string | null; quantidade: number };
+  sequencia: OperacaoDoItem[];
+};
+
+// Imprimir cupons de um ticket já gerado: as operações que entraram no item depois (o cupom é
+// criado no mesmo ticket) ou a reimpressão de um cupom perdido (sai com o mesmo código).
+const CuponsAvulsos = forwardRef<HTMLElement, { inicial: { id: number; vez: number } | null; onImpresso: () => void }>(
+  function CuponsAvulsos({ inicial, onImpresso }, ref) {
+    const [numero, setNumero] = useState("");
+    const [dados, setDados] = useState<DadosCupons | null>(null);
+    const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
+    const [retorno, setRetorno] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+    const [ocupado, setOcupado] = useState(false);
+
+    async function buscar(n: string, manterAviso = false) {
+      const id = Number(n.replace(/\D/g, ""));
+      if (!id) return;
+      if (!manterAviso) setRetorno(null);
+      setOcupado(true);
+      try {
+        const r = await api<DadosCupons>(`/api/tickets/cupons?ticket=${id}`);
+        setDados(r);
+        // já deixa marcadas as operações que o ticket ainda não tem
+        setMarcadas(new Set(r.sequencia.filter((o) => !o.cupom_id).map((o) => o.operacao_id)));
+      } catch (e) {
+        setDados(null);
+        setRetorno({ tipo: "erro", texto: mensagemErro(e) });
+      } finally {
+        setOcupado(false);
+      }
+    }
+
+    useEffect(() => {
+      if (!inicial) return;
+      setNumero(String(inicial.id));
+      buscar(String(inicial.id));
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inicial]);
+
+    async function imprimirMarcadas() {
+      if (!dados || !marcadas.size) return;
+      setRetorno(null);
+      setOcupado(true);
+      const aba = window.open("", "_blank");
+      try {
+        const r = await api<{ cupons: number[]; criados: number }>("/api/tickets/cupons", {
+          method: "POST",
+          body: JSON.stringify({ ticket_id: dados.ticket.id, operacao_ids: Array.from(marcadas) }),
+        });
+        const url = `/tickets/imprimir?ids=${dados.ticket.id}&cupons=${r.cupons.join(",")}`;
+        if (aba) aba.location.href = url;
+        else window.open(url, "_blank");
+        setRetorno({
+          tipo: "ok",
+          texto:
+            `${r.cupons.length} ${r.cupons.length === 1 ? "cupom enviado" : "cupons enviados"} para impressão` +
+            (r.criados ? ` (${r.criados} ${r.criados === 1 ? "novo incluído" : "novos incluídos"} no ticket #${dados.ticket.id}).` : "."),
+        });
+        await buscar(String(dados.ticket.id), true);
+        onImpresso();
+      } catch (e) {
+        aba?.close();
+        setRetorno({ tipo: "erro", texto: mensagemErro(e) });
+      } finally {
+        setOcupado(false);
+      }
+    }
+
+    function alternar(id: number) {
+      const n = new Set(marcadas);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      setMarcadas(n);
+    }
+
+    const novas = dados ? dados.sequencia.filter((o) => marcadas.has(o.operacao_id) && !o.cupom_id).length : 0;
+
+    return (
+      <section className="bloco" ref={ref}>
+        <div className="bloco-cabecalho">
+          <div>
+            <h2>Imprimir cupons de um ticket</h2>
+            <p className="bloco-descricao">
+              Para a operação que entrou no item depois de o ticket ser gerado, ou para um cupom que se perdeu.
+            </p>
+          </div>
+        </div>
+        <form
+          className="cupons-busca"
+          onSubmit={(e) => {
+            e.preventDefault();
+            buscar(numero);
+          }}
+        >
+          <label className="campo">
+            <span>Número do ticket</span>
+            <input
+              className="entrada num"
+              inputMode="numeric"
+              placeholder="Ex: 149"
+              value={numero}
+              onChange={(e) => setNumero(e.target.value.replace(/\D/g, ""))}
+            />
+          </label>
+          <button type="submit" className="botao botao-contorno" disabled={!numero || ocupado}>
+            <Search size={15} aria-hidden />
+            Buscar
+          </button>
+        </form>
+
+        {retorno && (
+          <div style={{ marginTop: 12 }}>
+            <Aviso tipo={retorno.tipo}>{retorno.texto}</Aviso>
+          </div>
+        )}
+
+        {dados && (
+          <div style={{ marginTop: 14 }}>
+            <p className="num" style={{ margin: "0 0 10px", fontWeight: 600 }}>
+              Ticket #{dados.ticket.id} · OP {dados.ticket.op} · Ref {dados.ticket.referencia} · {dados.ticket.cor ?? "—"} · Tam{" "}
+              {dados.ticket.tamanho ?? "—"} · {dados.ticket.quantidade} peças
+            </p>
+            {dados.sequencia.length === 0 ? (
+              <div className="vazio">O item deste ticket não tem operações cadastradas.</div>
+            ) : (
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th style={{ width: 36 }} />
+                    <th>Parte</th>
+                    <th>Ordem</th>
+                    <th>Operação</th>
+                    <th>Máquina</th>
+                    <th>No ticket</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dados.sequencia.map((o) => (
+                    <tr
+                      key={o.operacao_id}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => alternar(o.operacao_id)}
+                      data-selecionada={marcadas.has(o.operacao_id)}
+                    >
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Imprimir ${o.nome}`}
+                          checked={marcadas.has(o.operacao_id)}
+                          onChange={() => alternar(o.operacao_id)}
+                        />
+                      </td>
+                      <td>
+                        <span className={`selo selo-${o.parte}`}>{NOME_PARTE[o.parte].replace("Parte ", "")}</span>
+                      </td>
+                      <td className="forte num">{o.ordem}ª</td>
+                      <td>{o.nome}</td>
+                      <td className="fraco">{o.maquina ?? "—"}</td>
+                      <td>
+                        {o.cupom_id ? (
+                          <span className="fraco" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <Check size={14} aria-hidden />
+                            {o.apontado ? "sim, já apontado" : "sim"}
+                          </span>
+                        ) : (
+                          <span style={{ color: "var(--rosa-escuro)", fontWeight: 600 }}>não, será incluída</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div className="gerar-rodape">
+              <button type="button" className="botao botao-contorno" disabled={!marcadas.size || ocupado} onClick={imprimirMarcadas}>
+                <Printer size={16} aria-hidden />
+                Imprimir {marcadas.size} {marcadas.size === 1 ? "cupom" : "cupons"}
+              </button>
+              {novas > 0 && (
+                <span className="fraco">
+                  {novas} {novas === 1 ? "operação será incluída" : "operações serão incluídas"} no ticket e poderá ser apontada.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+    );
+  }
+);

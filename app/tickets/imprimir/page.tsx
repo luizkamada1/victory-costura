@@ -130,14 +130,25 @@ function montarFolhas(tickets: Ticket[]): Bloco[][][] {
 function Tickets() {
   const params = useSearchParams();
   const ids = params.get("ids") ?? "";
+  // ?cupons=1,2,3 imprime só esses cupons dos tickets (cupons avulsos ou reimpressão)
+  const cupons = params.get("cupons") ?? "";
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     api<{ tickets: Ticket[] }>(`/api/tickets?ids=${encodeURIComponent(ids)}`)
-      .then((r) => setTickets(r.tickets))
+      .then((r) => {
+        const so = new Set(cupons.split(",").map(Number).filter((n) => n > 0));
+        setTickets(
+          so.size
+            ? r.tickets
+                .map((t) => ({ ...t, operacoes: t.operacoes.filter((o) => so.has(o.id)) }))
+                .filter((t) => t.operacoes.length)
+            : r.tickets
+        );
+      })
       .catch((e) => setErro(mensagemErro(e)));
-  }, [ids]);
+  }, [ids, cupons]);
 
   // Marca os tickets como impressos quando a janela de impressão do navegador fecha
   // (pelo botão Imprimir ou pelo Ctrl+P). O navegador não informa se a pessoa cancelou.

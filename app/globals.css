@@ -1574,3 +1574,14 @@ input[type="number"]::-webkit-inner-spin-button {
     color: var(--erro);
   }
 }
+
+/* tickets: busca de um ticket para imprimir cupons avulsos */
+.cupons-busca {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.cupons-busca .campo {
+  width: 180px;
+}
