@@ -21,6 +21,8 @@ import {
 } from "@/lib/producao";
 
 type OpcaoParte = "ambas" | Parte;
+const rotuloItem = (i: Item) => `${i.referencia} · ${i.nome}`;
+
 type GrupoCor = { chave: number; cor: string; qtd: Record<string, string> };
 
 let proximaChave = 0;
@@ -41,6 +43,7 @@ export default function TicketsPage() {
   // formulário de geração
   const [op, setOp] = useState("");
   const [itemId, setItemId] = useState("");
+  const [textoRef, setTextoRef] = useState("");
   const [parte, setParte] = useState<OpcaoParte>("ambas");
   const [grupos, setGrupos] = useState<GrupoCor[]>([novoGrupo("")]);
   const [tamanhoLivre, setTamanhoLivre] = useState("");
@@ -112,6 +115,15 @@ export default function TicketsPage() {
   const qtdTickets = grupos
     .flatMap(linhasDo)
     .reduce((s, l) => s + (l.quantidade <= 0 ? 0 : pacote > 0 ? Math.ceil(l.quantidade / pacote) : 1), 0);
+
+  // aceita o texto escolhido na lista ("27100 · Nome") ou só a referência digitada ("27100")
+  function digitarReferencia(texto: string) {
+    setTextoRef(texto);
+    const limpo = texto.trim().toLowerCase();
+    const achado = itens.find((i) => rotuloItem(i).toLowerCase() === limpo || i.referencia.toLowerCase() === limpo);
+    const id = achado ? String(achado.id) : "";
+    if (id !== itemId) escolherItem(id);
+  }
 
   function escolherItem(id: string) {
     setItemId(id);
@@ -245,14 +257,25 @@ export default function TicketsPage() {
           </label>
           <label className="campo">
             <span>Referência</span>
-            <select className="entrada" value={itemId} onChange={(e) => escolherItem(e.target.value)}>
-              <option value="">Escolha o item</option>
+            {/* campo de busca: digitar parte da referência ou do nome filtra a lista de sugestões */}
+            <input
+              className="entrada"
+              list="lista-referencias"
+              placeholder="Digite a referência ou o nome do item"
+              value={textoRef}
+              onChange={(e) => digitarReferencia(e.target.value)}
+              onBlur={() => item && setTextoRef(rotuloItem(item))}
+            />
+            <datalist id="lista-referencias">
               {itens.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.referencia} · {i.nome}
-                </option>
+                <option key={i.id} value={rotuloItem(i)} />
               ))}
-            </select>
+            </datalist>
+            {textoRef.trim() &&
+              !item &&
+              !itens.some((i) => rotuloItem(i).toLowerCase().includes(textoRef.trim().toLowerCase())) && (
+                <small style={{ color: "var(--alerta)" }}>Nenhuma referência encontrada</small>
+              )}
           </label>
           <label className="campo">
             <span>Parte</span>

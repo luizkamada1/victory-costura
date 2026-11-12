@@ -75,7 +75,8 @@ function textoDe<T>(c: Coluna<T>, linha: T) {
 export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Ordem = null) {
   const [ordem, setOrdem] = useState<Ordem>(ordemInicial);
   const [filtros, setFiltros] = useState<Record<string, string>>({});
-  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  // a linha de filtros já vem aberta; o botão serve para ocultar
+  const [mostrarFiltros, setMostrarFiltros] = useState(true);
   const prefixo = useId();
 
   const visiveis = useMemo(() => {
@@ -156,7 +157,8 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
                     style={filtrosAtivos ? { background: "var(--rosa-claro)", color: "var(--rosa-escuro)" } : undefined}
                   >
                     <ListFilter size={14} aria-hidden />
-                    Filtrar{filtrosAtivos ? ` · ${filtrosAtivos}` : ""}
+                    {mostrarFiltros ? "Ocultar filtros" : "Filtrar"}
+                    {filtrosAtivos ? ` · ${filtrosAtivos}` : ""}
                   </button>
                 )}
               </span>
