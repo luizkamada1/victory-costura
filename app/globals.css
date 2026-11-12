@@ -1526,8 +1526,8 @@ input[type="checkbox"] {
 
   .tabela th,
   .tabela td {
-    padding-left: 8px;
-    padding-right: 8px;
+    padding-left: 6px;
+    padding-right: 6px;
   }
 
   .data-longa {
@@ -1536,6 +1536,19 @@ input[type="checkbox"] {
 
   .data-curta {
     display: inline;
+  }
+
+  /* cupons apontados só com o número (0/13), sem a barrinha */
+  .progresso {
+    grid-template-columns: auto;
+  }
+
+  .progresso .barra {
+    display: none;
+  }
+
+  .tabela .acoes {
+    gap: 0;
   }
 }
 
@@ -1575,13 +1588,91 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
-/* tickets: busca de um ticket para imprimir cupons avulsos */
-.cupons-busca {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
+/* janela (modal) para imprimir cupons avulsos de um ticket */
+.modal {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-grande);
+  background: var(--superficie);
+  color: var(--tinta);
+  box-shadow: 0 24px 60px rgba(29, 29, 31, 0.22), 0 2px 8px rgba(29, 29, 31, 0.08);
 }
 
-.cupons-busca .campo {
-  width: 180px;
+.modal::backdrop {
+  background: rgba(29, 29, 31, 0.32);
+}
+
+.modal[open] {
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+
+@starting-style {
+  .modal[open] {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+.modal-conteudo {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  padding: 22px 24px 20px;
+}
+
+.modal-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.modal-cabecalho h2 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+
+.modal-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--regua);
+}
+
+.modal-lista label {
+  display: grid;
+  grid-template-columns: 18px 64px 30px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 6px;
+  border-bottom: 1px solid var(--regua);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .modal-lista label:hover {
+    background: var(--rosa-claro);
+  }
+}
+
+.modal-lista label[data-marcada="true"] {
+  background: var(--rosa-fundo);
+}
+
+.modal-lista-nome {
+  min-width: 0;
+}
+
+.modal-rodape {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
 }
