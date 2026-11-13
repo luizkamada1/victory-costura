@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import JsBarcode from "jsbarcode";
 import { ArrowLeft, Printer } from "lucide-react";
 import { api, mensagemErro } from "@/components/Layout";
-import { NOME_PARTE, PARTES, Ticket, TicketOperacao, codigoBarras, formatarData } from "@/lib/producao";
+import { NOME_PARTE, PARTES, Ticket, TicketOperacao, codigoBarras } from "@/lib/producao";
 
 function CodigoDeBarras({ valor }: { valor: string }) {
   const ref = useRef<SVGSVGElement>(null);
@@ -33,7 +33,9 @@ function Cupom({ t, o }: { t: Ticket; o: TicketOperacao }) {
       <div className="cupom-ordem">{o.ordem}ª</div>
       <div className="cupom-info">
         <div className="cupom-nome">{o.nome_operacao}</div>
-        <div className="cupom-maquina">Máquina: {o.maquina ?? "—"}</div>
+        <div className="cupom-maquina">
+          Máquina: <b>{o.maquina ?? "—"}</b>
+        </div>
         <div className="cupom-ref">
           OP <b>{t.op}</b> · Ref <b>{t.referencia}</b>
         </div>
@@ -48,8 +50,8 @@ function Cupom({ t, o }: { t: Ticket; o: TicketOperacao }) {
   );
 }
 
-// Linha 1: campos curtos (OP até 6, referência 5, tamanho 2, quantidade 4 caracteres).
-// Linha 2: a cor, que pode ser longa, e o número do ticket.
+// Linha 1: campos curtos (OP até 6, referência 5, tamanho 2, quantidade 4 caracteres) e o nº do ticket.
+// Linha 2: nome do pijama, cor e grade.
 function Cabecalho({ t }: { t: Ticket }) {
   return (
     <div className="cabecalho">
@@ -69,15 +71,21 @@ function Cabecalho({ t }: { t: Ticket }) {
         <span>Qtd.</span>
         <b>{t.quantidade}</b>
       </div>
+      <div className="cab-campo cab-id">
+        <span>Ticket</span>
+        <b>#{t.id}</b>
+      </div>
+      <div className="cab-campo cab-nome">
+        <span>Pijama</span>
+        <b>{t.nome_item ?? "—"}</b>
+      </div>
       <div className="cab-campo cab-cor">
         <span>Cor</span>
         <b>{t.cor ?? "—"}</b>
       </div>
-      <div className="cab-campo cab-id">
-        <span>Ticket</span>
-        <b>
-          #{t.id} <small>{formatarData(t.created_at)}</small>
-        </b>
+      <div className="cab-campo cab-grade">
+        <span>Grade</span>
+        <b>{t.grade ?? "—"}</b>
       </div>
     </div>
   );
@@ -226,17 +234,22 @@ export default function ImprimirTicketsPage() {
         .parte:nth-child(2n) { border-left: 1.5px dashed #555; }
         .parte:nth-child(n+3) { border-top: 1.5px dashed #555; }
         /* fundo preto + 1px de espaço entre as caixas brancas = as linhas da grade do cabeçalho */
-        .cabecalho { display: grid; grid-template-columns: 1.25fr 1.1fr .7fr .9fr; gap: 1px; background: #000;
+        /* 12 colunas: linha 1 = OP 3 · Ref 3 · Tam 2 · Qtd 2 · Ticket 2; linha 2 = Pijama 6 · Cor 4 · Grade 2 */
+        .cabecalho { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1px; background: #000;
           border: 2px solid #000; }
+        .cabecalho > .cab-campo { grid-column: span 3; }
+        .cabecalho > .cab-campo:nth-child(3),
+        .cabecalho > .cab-campo:nth-child(4),
+        .cabecalho > .cab-id,
+        .cabecalho > .cab-grade { grid-column: span 2; }
+        .cabecalho > .cab-nome { grid-column: span 6; }
+        .cabecalho > .cab-cor { grid-column: span 4; }
         .cab-campo { display: flex; flex-direction: column; padding: 2px 6px 3px; background: #fff; min-width: 0; }
-        .cab-cor { grid-column: span 2; }
-        .cab-id { grid-column: span 2; }
         .cab-campo span { font-size: 7.5px; text-transform: uppercase; letter-spacing: .5px; color: #444; line-height: 1.2; }
         .cab-campo b { font-size: 16px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .cab-cor b { font-size: 13px; }
+        .cab-cor b, .cab-nome b, .cab-grade b { font-size: 9.5px; line-height: 1.65; }
         .cab-campo b.cab-texto-longo { font-size: 11px; line-height: 1.45; }
         .cab-id b { font-size: 12px; }
-        .cab-id small { font-size: 9px; font-weight: 400; color: #333; }
         .parte-titulo { margin-top: 2mm; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
           background: #000; color: #fff; padding: 3px 8px; }
         .cupom { display: flex; align-items: center; gap: 8px; padding: 2px 2px; border-bottom: 1.5px dashed #555;
@@ -244,7 +257,7 @@ export default function ImprimirTicketsPage() {
         .cupom-ordem { font-size: 18px; font-weight: 900; width: 26px; text-align: center; flex-shrink: 0; }
         .cupom-info { flex: 1; min-width: 0; }
         .cupom-nome { font-size: 12px; font-weight: 800; line-height: 1.1; }
-        .cupom-maquina { font-size: 9.5px; line-height: 1.15; }
+        .cupom-maquina { font-size: 11px; line-height: 1.2; }
         .cupom-ref { font-size: 8px; color: #222; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cupom-codigo { flex-shrink: 0; }
         .cupom-codigo svg { display: block; height: 42px; width: auto; }

@@ -88,6 +88,7 @@ export type Ticket = {
   quantidade: number;
   created_at: string;
   impresso_em?: string | null; // primeira impressão; ausente enquanto o campo não existir no banco
+  grade?: string | null; // grade do item (Adulto, Plus Size...), vinda do cadastro do item
   operacoes: TicketOperacao[];
 };
 

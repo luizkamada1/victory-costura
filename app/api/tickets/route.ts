@@ -6,7 +6,8 @@ import { PARTES, Parte, fatorGrade } from "@/lib/producao";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const CAMPOS_TICKET = "id, op, item_id, referencia, nome_item, cor, tamanho, partes, quantidade, created_at";
+// itens(grades): a grade vem do cadastro do item (o ticket não guarda), para sair no ticket impresso
+const CAMPOS_TICKET = "id, op, item_id, referencia, nome_item, cor, tamanho, partes, quantidade, created_at, itens(grades)";
 const CAMPOS_OPERACAO =
   "id, ticket_id, operacao_id, nome_operacao, maquina, parte, ordem, tempo_minutos, quantidade, minutos_total, costureira_id, data_producao, apontado_em";
 
@@ -53,7 +54,10 @@ export async function GET(req: NextRequest) {
       lista.push({ ...o, tempo_minutos: Number(o.tempo_minutos), minutos_total: Number(o.minutos_total) });
       porTicket.set(o.ticket_id, lista);
     }
-    const resultado = (tickets ?? []).map((t) => ({ ...t, operacoes: porTicket.get(t.id) ?? [] }));
+    const resultado = (tickets ?? []).map((t) => {
+      const { itens: item, ...resto } = t as { id: number; itens?: { grades?: string[] } | null };
+      return { ...resto, grade: item?.grades?.[0] ?? null, operacoes: porTicket.get(t.id) ?? [] };
+    });
     if (ids.length > 0) resultado.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
     return NextResponse.json({ tickets: resultado });
   } catch (err) {
