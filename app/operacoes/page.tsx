@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
+import { TituloRecolhivel } from "@/components/Recolhivel";
 import { AJUSTES_PADRAO, AjustesGrade, GRADES, NOME_PARTE, Operacao, PARTES, Parte, fatorGrade } from "@/lib/producao";
 
 type Form = { id?: number; nome: string; tempo_minutos: string; maquina: string; parte: Parte };
@@ -327,15 +328,5 @@ function AjustesPorGrade({ ajustes, onSalvo }: { ajustes: AjustesGrade; onSalvo:
         </div>
       )}
     </form>
-  );
-}
-
-// Título de bloco que abre e fecha o conteúdo ao clicar
-function TituloRecolhivel({ aberto, onAlternar, children }: { aberto: boolean; onAlternar: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" className="titulo-recolhivel" onClick={onAlternar} aria-expanded={aberto}>
-      <ChevronDown size={18} aria-hidden style={{ transform: aberto ? "none" : "rotate(-90deg)" }} />
-      <h2>{children}</h2>
-    </button>
   );
 }

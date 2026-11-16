@@ -16,7 +16,15 @@ const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
  * A linha de 100% fica marcada; o último ponto leva o valor escrito; o resto
  * aparece ao passar o mouse (ou com as setas do teclado).
  */
-export default function GraficoEficiencia({ pontos, carregando }: { pontos: PontoEficiencia[]; carregando?: boolean }) {
+export default function GraficoEficiencia({
+  pontos,
+  carregando,
+  nome,
+}: {
+  pontos: PontoEficiencia[];
+  carregando?: boolean;
+  nome?: string; // costureira do gráfico; sem nome, é a equipe
+}) {
   const caixa = useRef<HTMLDivElement>(null);
   const [largura, setLargura] = useState(640);
   const [ativo, setAtivo] = useState<number | null>(null);
@@ -79,7 +87,7 @@ export default function GraficoEficiencia({ pontos, carregando }: { pontos: Pont
         width={largura}
         height={ALTURA}
         role="img"
-        aria-label={`Eficiência da equipe em ${pontos.length} dias apurados do período. Último dia: ${pct(valores[ultimo] / 100)}.`}
+        aria-label={`Eficiência ${nome ? `de ${nome}` : "da equipe"} em ${pontos.length} dias apurados do período. Último dia: ${pct(valores[ultimo] / 100)}.`}
         tabIndex={0}
         onKeyDown={teclado}
         onBlur={() => setAtivo(null)}

@@ -1,12 +1,27 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronRight, Download } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  Download,
+} from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { BarraEficiencia, pct } from "@/components/Medidas";
-import GraficoEficiencia, { PontoEficiencia } from "@/components/GraficoEficiencia";
+import GraficoEficiencia, {
+  PontoEficiencia,
+} from "@/components/GraficoEficiencia";
 import { useTabela } from "@/components/Tabela";
-import { DIAS_SEMANA, corEficiencia, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
+import { TituloRecolhivel } from "@/components/Recolhivel";
+import {
+  DIAS_SEMANA,
+  corEficiencia,
+  diaSemana,
+  formatarData,
+  formatarMinutos,
+  hojeISO,
+} from "@/lib/producao";
 
 type Dia = {
   data: string;
@@ -43,6 +58,11 @@ function periodo(preset: string): [string, string] {
       return [somarDias(hoje, -1), somarDias(hoje, -1)];
     case "semana":
       return [somarDias(hoje, -((diaSemana(hoje) + 6) % 7)), hoje];
+    case "semana-passada": {
+      // segunda a domingo da semana anterior
+      const segunda = somarDias(hoje, -((diaSemana(hoje) + 6) % 7) - 7);
+      return [segunda, somarDias(segunda, 6)];
+    }
     case "mes":
       return [`${hoje.slice(0, 7)}-01`, hoje];
     case "mes-passado": {
@@ -59,19 +79,47 @@ const PRESETS: [string, string][] = [
   ["hoje", "Hoje"],
   ["ontem", "Ontem"],
   ["semana", "Esta semana"],
+  ["semana-passada", "Semana passada"],
   ["mes", "Este mês"],
   ["mes-passado", "Mês passado"],
 ];
 
-const minutos = (m: number) => m.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+const CHAVE_RESUMO = "costura:eficiencia-resumo-recolhido";
+
+// dias que entram no gráfico: com produção e com tempo disponível
+const apurados = (dias: PontoEficiencia[]) =>
+  dias
+    .filter((d) => d.produzido > 0 && d.disponivel > 0)
+    .sort((a, b) => a.data.localeCompare(b.data));
+
+const minutos = (m: number) =>
+  m.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 
 export default function EficienciaPage() {
-  const [[inicio, fim], setPeriodo] = useState<[string, string]>(periodo("mes"));
+  const [[inicio, fim], setPeriodo] = useState<[string, string]>(
+    periodo("mes"),
+  );
   const [preset, setPreset] = useState("mes");
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
+  const [resumoAberto, setResumoAberto] = useState(true);
+
+  // lembra neste navegador se o resumo foi recolhido
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(CHAVE_RESUMO) === "1") setResumoAberto(false);
+    } catch {}
+  }, []);
+  function alternarResumo() {
+    setResumoAberto((v) => {
+      try {
+        localStorage.setItem(CHAVE_RESUMO, v ? "1" : "0");
+      } catch {}
+      return !v;
+    });
+  }
 
   useEffect(() => {
     if (!inicio || !fim) return;
@@ -88,19 +136,37 @@ export default function EficienciaPage() {
     [
       { id: "nome", titulo: "Costureira", valor: (l) => l.nome },
       { id: "setor", titulo: "Setor", valor: (l) => l.setor },
-      { id: "disponivel", titulo: "Disponível", alinhar: "right", valor: (l) => l.disponivel, texto: (l) => formatarMinutos(l.disponivel) },
-      { id: "produzido", titulo: "Produzido", alinhar: "right", valor: (l) => l.produzido, texto: (l) => formatarMinutos(l.produzido) },
-      { id: "cupons", titulo: "Cupons", alinhar: "right", valor: (l) => l.operacoes },
+      {
+        id: "disponivel",
+        titulo: "Disponível",
+        alinhar: "right",
+        valor: (l) => l.disponivel,
+        texto: (l) => formatarMinutos(l.disponivel),
+      },
+      {
+        id: "produzido",
+        titulo: "Produzido",
+        alinhar: "right",
+        valor: (l) => l.produzido,
+        texto: (l) => formatarMinutos(l.produzido),
+      },
+      {
+        id: "cupons",
+        titulo: "Cupons",
+        alinhar: "right",
+        valor: (l) => l.operacoes,
+      },
       {
         id: "eficiencia",
         titulo: "Eficiência",
         largura: "30%",
         // em %, para o filtro aceitar ">80"
-        valor: (l) => (l.eficiencia === null ? null : Math.round(l.eficiencia * 1000) / 10),
+        valor: (l) =>
+          l.eficiencia === null ? null : Math.round(l.eficiencia * 1000) / 10,
         texto: (l) => pct(l.eficiencia),
       },
     ],
-    { id: "eficiencia", direcao: "desc" }
+    { id: "eficiencia", direcao: "desc" },
   );
   const visiveis = tabela.visiveis;
   const totalDisp = visiveis.reduce((s, l) => s + l.disponivel, 0);
@@ -112,18 +178,27 @@ export default function EficienciaPage() {
   const porDia = new Map<string, PontoEficiencia>();
   for (const l of visiveis) {
     for (const d of l.dias) {
-      const atual = porDia.get(d.data) ?? { data: d.data, produzido: 0, disponivel: 0 };
+      const atual = porDia.get(d.data) ?? {
+        data: d.data,
+        produzido: 0,
+        disponivel: 0,
+      };
       atual.produzido += d.produzido;
       atual.disponivel += d.disponivel;
       porDia.set(d.data, atual);
     }
   }
-  const diasApurados = Array.from(porDia.values())
-    .filter((d) => d.produzido > 0 && d.disponivel > 0)
-    .sort((a, b) => a.data.localeCompare(b.data));
+  const diasApurados = apurados(Array.from(porDia.values()));
   const situacao =
-    efPeriodo === null ? null : efPeriodo >= 0.85 ? "Dentro do esperado" : efPeriodo >= 0.65 ? "Atenção" : "Abaixo do esperado";
-  const IconeSituacao = efPeriodo !== null && efPeriodo >= 0.85 ? CheckCircle2 : AlertTriangle;
+    efPeriodo === null
+      ? null
+      : efPeriodo >= 0.85
+        ? "Dentro do esperado"
+        : efPeriodo >= 0.65
+          ? "Atenção"
+          : "Abaixo do esperado";
+  const IconeSituacao =
+    efPeriodo !== null && efPeriodo >= 0.85 ? CheckCircle2 : AlertTriangle;
 
   async function exportar() {
     const XLSX = await import("xlsx");
@@ -133,7 +208,8 @@ export default function EficienciaPage() {
       "Minutos disponíveis": l.disponivel,
       "Minutos produzidos": Math.round(l.produzido * 10) / 10,
       Cupons: l.operacoes,
-      "Eficiência (%)": l.eficiencia === null ? "" : Math.round(l.eficiencia * 1000) / 10,
+      "Eficiência (%)":
+        l.eficiencia === null ? "" : Math.round(l.eficiencia * 1000) / 10,
     }));
     const diario = visiveis.flatMap((l) =>
       l.dias.map((d) => ({
@@ -143,12 +219,23 @@ export default function EficienciaPage() {
         "Ocorrências (min)": d.ocorrencias,
         "Disponível (min)": d.disponivel,
         "Produzido (min)": Math.round(d.produzido * 10) / 10,
-        "Eficiência (%)": d.disponivel > 0 ? Math.round((d.produzido / d.disponivel) * 1000) / 10 : "",
-      }))
+        "Eficiência (%)":
+          d.disponivel > 0
+            ? Math.round((d.produzido / d.disponivel) * 1000) / 10
+            : "",
+      })),
     );
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), "Resumo");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(diario), "Por dia");
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(resumo),
+      "Resumo",
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(diario),
+      "Por dia",
+    );
     XLSX.writeFile(wb, `eficiencia_${inicio}_${fim}.xlsx`);
   }
 
@@ -157,7 +244,12 @@ export default function EficienciaPage() {
       titulo="Eficiência"
       subtitulo="Tempo produzido dividido pelo tempo disponível de cada costureira."
       acoes={
-        <button type="button" className="botao botao-secundario" onClick={exportar} disabled={!visiveis.length}>
+        <button
+          type="button"
+          className="botao botao-secundario"
+          onClick={exportar}
+          disabled={!visiveis.length}
+        >
           <Download size={16} aria-hidden />
           Exportar para Excel
         </button>
@@ -210,46 +302,81 @@ export default function EficienciaPage() {
         </div>
       </section>
 
-      <div className="eficiencia-topo">
-        <section className="bloco cartao-eficiencia" aria-busy={carregando}>
-          <h2>Eficiência do período</h2>
-          <p className="bloco-descricao">
-            {formatarData(inicio)} a {formatarData(fim)}
-            {tabela.filtrando ? " · costureiras filtradas" : ""}
-          </p>
-          <div className="numero-heroi" style={{ opacity: carregando ? 0.5 : 1 }}>
-            {pct(efPeriodo)}
-          </div>
-          {situacao && (
-            <span className="situacao" style={{ color: corEficiencia(efPeriodo) }}>
-              <IconeSituacao size={15} aria-hidden />
-              {situacao}
+      <div className="resumo-cabecalho">
+        <TituloRecolhivel aberto={resumoAberto} onAlternar={alternarResumo}>
+          Resumo do período
+        </TituloRecolhivel>
+        {!resumoAberto && (
+          <span
+            className="resumo-linha num"
+            style={{ opacity: carregando ? 0.5 : 1 }}
+          >
+            <strong style={{ color: corEficiencia(efPeriodo) }}>
+              {pct(efPeriodo)}
+            </strong>
+            <span className="fraco">
+              {formatarMinutos(totalProd)} produzidos de{" "}
+              {formatarMinutos(totalDisp)}
             </span>
-          )}
-          <p className="bloco-descricao num" style={{ marginTop: 12 }}>
-            {formatarMinutos(totalProd)} produzidos de {formatarMinutos(totalDisp)} disponíveis
-          </p>
-        </section>
-
-        <section className="bloco" aria-busy={carregando}>
-          <h2>Eficiência por dia</h2>
-          <p className="bloco-descricao" style={{ marginBottom: 12 }}>
-            Dias com produção entre {formatarData(inicio)} e {formatarData(fim)}
-            {tabela.filtrando ? ", costureiras filtradas" : ""}.
-          </p>
-          <GraficoEficiencia pontos={diasApurados} carregando={carregando} />
-        </section>
+          </span>
+        )}
       </div>
+
+      {resumoAberto && (
+        <div className="eficiencia-topo">
+          <section className="bloco cartao-eficiencia" aria-busy={carregando}>
+            <h2>Eficiência do período</h2>
+            <p className="bloco-descricao">
+              {formatarData(inicio)} a {formatarData(fim)}
+              {tabela.filtrando ? " · costureiras filtradas" : ""}
+            </p>
+            <div
+              className="numero-heroi"
+              style={{ opacity: carregando ? 0.5 : 1 }}
+            >
+              {pct(efPeriodo)}
+            </div>
+            {situacao && (
+              <span
+                className="situacao"
+                style={{ color: corEficiencia(efPeriodo) }}
+              >
+                <IconeSituacao size={15} aria-hidden />
+                {situacao}
+              </span>
+            )}
+            <p className="bloco-descricao num" style={{ marginTop: 12 }}>
+              {formatarMinutos(totalProd)} produzidos de{" "}
+              {formatarMinutos(totalDisp)} disponíveis
+            </p>
+          </section>
+
+          <section className="bloco" aria-busy={carregando}>
+            <h2>Eficiência por dia</h2>
+            <p className="bloco-descricao" style={{ marginBottom: 12 }}>
+              Dias com produção entre {formatarData(inicio)} e{" "}
+              {formatarData(fim)}
+              {tabela.filtrando ? ", costureiras filtradas" : ""}.
+            </p>
+            <GraficoEficiencia pontos={diasApurados} carregando={carregando} />
+          </section>
+        </div>
+      )}
 
       <section className="bloco" aria-busy={carregando}>
         <div className="bloco-cabecalho">
           <div>
             <h2>Por costureira</h2>
             <p className="bloco-descricao">
-              Clique numa linha para ver dia a dia. Todas as barras usam a mesma régua; o traço marca 100%.
+              Clique numa linha para ver o gráfico e o dia a dia da costureira.
+              Todas as barras usam a mesma régua; o traço marca 100%.
             </p>
           </div>
-          {carregando && <span className="fraco" style={{ fontSize: 12.5 }}>Atualizando…</span>}
+          {carregando && (
+            <span className="fraco" style={{ fontSize: 12.5 }}>
+              Atualizando…
+            </span>
+          )}
         </div>
         <div className="tabela-caixa">
           <table className="tabela">
@@ -266,18 +393,31 @@ export default function EficienciaPage() {
                       aria-expanded={aberto}
                     >
                       <td className="forte quebra">
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
                           <ChevronRight
                             size={15}
                             aria-hidden
-                            style={{ transform: aberto ? "rotate(90deg)" : "none", transition: "transform 160ms ease-out" }}
+                            style={{
+                              transform: aberto ? "rotate(90deg)" : "none",
+                              transition: "transform 160ms ease-out",
+                            }}
                           />
                           {l.nome}
                         </span>
                       </td>
                       <td>{l.setor ?? "—"}</td>
-                      <td className="direita">{formatarMinutos(l.disponivel)}</td>
-                      <td className="direita">{formatarMinutos(l.produzido)}</td>
+                      <td className="direita">
+                        {formatarMinutos(l.disponivel)}
+                      </td>
+                      <td className="direita">
+                        {formatarMinutos(l.produzido)}
+                      </td>
                       <td className="direita">{l.operacoes}</td>
                       <td>
                         <BarraEficiencia ef={l.eficiencia} />
@@ -287,9 +427,21 @@ export default function EficienciaPage() {
                       <tr className="detalhe">
                         <td colSpan={6} style={{ padding: "8px 20px 16px" }}>
                           {l.dias.length ? (
-                            <DetalheDias dias={l.dias} />
+                            <>
+                              <div className="grafico-costureira">
+                                <h3>Eficiência por dia · {l.nome}</h3>
+                                <GraficoEficiencia
+                                  pontos={apurados(l.dias)}
+                                  carregando={carregando}
+                                  nome={l.nome}
+                                />
+                              </div>
+                              <DetalheDias dias={l.dias} />
+                            </>
                           ) : (
-                            <div className="vazio">Sem jornada nem produção neste período.</div>
+                            <div className="vazio">
+                              Sem jornada nem produção neste período.
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -301,12 +453,16 @@ export default function EficienciaPage() {
             {visiveis.length > 0 && (
               <tfoot>
                 <tr className="total">
-                  <td colSpan={2}>{tabela.filtrando ? "Total filtrado" : "Total da equipe"}</td>
+                  <td colSpan={2}>
+                    {tabela.filtrando ? "Total filtrado" : "Total da equipe"}
+                  </td>
                   <td className="direita">{formatarMinutos(totalDisp)}</td>
                   <td className="direita">{formatarMinutos(totalProd)}</td>
                   <td className="direita">{totalCupons}</td>
                   <td>
-                    <BarraEficiencia ef={totalDisp > 0 ? totalProd / totalDisp : null} />
+                    <BarraEficiencia
+                      ef={totalDisp > 0 ? totalProd / totalDisp : null}
+                    />
                   </td>
                 </tr>
               </tfoot>
@@ -328,12 +484,43 @@ export default function EficienciaPage() {
 function DetalheDias({ dias }: { dias: Dia[] }) {
   const ef = (d: Dia) => (d.disponivel > 0 ? d.produzido / d.disponivel : null);
   const tabela = useTabela<Dia>(dias, [
-    { id: "data", titulo: "Dia", valor: (d) => d.data, texto: (d) => `${formatarData(d.data)} ${DIAS_SEMANA[diaSemana(d.data)]}` },
-    { id: "jornada", titulo: "Jornada", alinhar: "right", valor: (d) => d.jornada },
-    { id: "ocorrencias", titulo: "Ocorrências", alinhar: "right", valor: (d) => d.ocorrencias },
-    { id: "disponivel", titulo: "Disponível", alinhar: "right", valor: (d) => d.disponivel },
-    { id: "produzido", titulo: "Produzido", alinhar: "right", valor: (d) => d.produzido, texto: (d) => minutos(d.produzido) },
-    { id: "cupons", titulo: "Cupons", alinhar: "right", valor: (d) => d.operacoes },
+    {
+      id: "data",
+      titulo: "Dia",
+      valor: (d) => d.data,
+      texto: (d) => `${formatarData(d.data)} ${DIAS_SEMANA[diaSemana(d.data)]}`,
+    },
+    {
+      id: "jornada",
+      titulo: "Jornada",
+      alinhar: "right",
+      valor: (d) => d.jornada,
+    },
+    {
+      id: "ocorrencias",
+      titulo: "Ocorrências",
+      alinhar: "right",
+      valor: (d) => d.ocorrencias,
+    },
+    {
+      id: "disponivel",
+      titulo: "Disponível",
+      alinhar: "right",
+      valor: (d) => d.disponivel,
+    },
+    {
+      id: "produzido",
+      titulo: "Produzido",
+      alinhar: "right",
+      valor: (d) => d.produzido,
+      texto: (d) => minutos(d.produzido),
+    },
+    {
+      id: "cupons",
+      titulo: "Cupons",
+      alinhar: "right",
+      valor: (d) => d.operacoes,
+    },
     {
       id: "eficiencia",
       titulo: "Eficiência",
@@ -353,12 +540,22 @@ function DetalheDias({ dias }: { dias: Dia[] }) {
           {tabela.visiveis.map((d) => (
             <tr key={d.data}>
               <td>
-                {formatarData(d.data)} <span className="fraco">{DIAS_SEMANA[diaSemana(d.data)].slice(0, 3)}</span>
+                {formatarData(d.data)}{" "}
+                <span className="fraco">
+                  {DIAS_SEMANA[diaSemana(d.data)].slice(0, 3)}
+                </span>
               </td>
               <td className="direita">{d.jornada}</td>
               <td
                 className="direita"
-                style={{ color: d.ocorrencias < 0 ? "var(--erro)" : d.ocorrencias > 0 ? "var(--ok)" : "var(--tinta-3)" }}
+                style={{
+                  color:
+                    d.ocorrencias < 0
+                      ? "var(--erro)"
+                      : d.ocorrencias > 0
+                        ? "var(--ok)"
+                        : "var(--tinta-3)",
+                }}
               >
                 {d.ocorrencias > 0 ? `+${d.ocorrencias}` : d.ocorrencias || "—"}
               </td>
@@ -369,7 +566,9 @@ function DetalheDias({ dias }: { dias: Dia[] }) {
                 {d.disponivel > 0 ? (
                   <BarraEficiencia ef={ef(d)} />
                 ) : (
-                  <span style={{ color: "var(--alerta)", fontSize: 12.5 }}>Produção num dia sem jornada</span>
+                  <span style={{ color: "var(--alerta)", fontSize: 12.5 }}>
+                    Produção num dia sem jornada
+                  </span>
                 )}
               </td>
             </tr>

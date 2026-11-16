@@ -1343,6 +1343,46 @@ input[type="checkbox"] {
 
 /* ───────── eficiência: card do período e gráfico ───────── */
 
+.resumo-cabecalho {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 4px 0 12px;
+}
+
+.resumo-cabecalho h2 {
+  font-size: 17px;
+}
+
+.resumo-linha {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.resumo-linha strong {
+  font-size: 17px;
+}
+
+.grafico-costureira {
+  /* não alarga a tabela: ocupa só a largura que a célula já tem */
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
+  margin: 4px 0 18px;
+  padding: 16px 18px 12px;
+  border-radius: var(--raio);
+  background: #fff;
+}
+
+.grafico-costureira h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .eficiencia-topo {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) minmax(0, 2.6fr);
