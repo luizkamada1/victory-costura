@@ -2227,3 +2227,242 @@ input[type="number"]::-webkit-inner-spin-button {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ───────── produção: kanban por OP ───────── */
+.kanban-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.kanban-busca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 220px;
+  max-width: 420px;
+  height: 42px;
+  padding: 0 6px 0 14px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--tinta-3);
+  box-shadow: inset 0 0 0 1px var(--regua);
+}
+
+.kanban-busca:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--rosa);
+}
+
+.kanban-busca input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--tinta);
+}
+
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.kanban-coluna {
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--raio-grande);
+  background: var(--rosa-claro);
+}
+
+.kanban-coluna[data-situacao="andamento"] {
+  background: var(--rosa-medio);
+}
+
+.kanban-coluna[data-situacao="finalizado"] {
+  background: #eaf3ec;
+}
+
+.kanban-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px 12px;
+}
+
+.kanban-cabecalho h2 {
+  font-size: 16px;
+}
+
+.kanban-cabecalho p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+}
+
+.kanban-pecas {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kanban-cartoes {
+  display: grid;
+  gap: 10px;
+}
+
+.kanban-cartao {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: #fff;
+  font: inherit;
+  color: var(--tinta);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(29, 29, 31, 0.06);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+
+.kanban-cartao:active {
+  transform: scale(0.99);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .kanban-cartao:hover {
+    box-shadow: 0 6px 18px rgba(29, 29, 31, 0.1);
+  }
+}
+
+.kanban-cartao[data-parado="true"] {
+  box-shadow: inset 3px 0 0 var(--alerta), 0 1px 2px rgba(29, 29, 31, 0.06);
+}
+
+.kanban-cartao-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.kanban-op {
+  font-size: 15.5px;
+  color: var(--tinta);
+}
+
+.kanban-item {
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+
+.kanban-cores {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.kanban-progresso {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.kanban-barra {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--rosa-claro);
+  overflow: hidden;
+}
+
+.kanban-barra div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--rosa-escuro);
+}
+
+.kanban-coluna[data-situacao="finalizado"] .kanban-barra div {
+  background: var(--ok);
+}
+
+.kanban-partes {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--tinta-3);
+}
+
+.kanban-partes strong {
+  color: var(--tinta);
+  font-weight: 600;
+}
+
+.kanban-rodape {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--regua);
+  font-size: 12px;
+  color: var(--tinta-3);
+}
+
+.kanban-alerta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--alerta);
+  font-weight: 600;
+}
+
+.kanban-vazio {
+  padding: 18px 8px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--tinta-3);
+}
+
+.detalhe-titulo {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tabela-compacta td,
+.tabela-compacta th {
+  height: 34px;
+}
+
+.detalhe-costureiras {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detalhe-costureiras li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--regua);
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .kanban {
+    grid-template-columns: 1fr;
+  }
+}

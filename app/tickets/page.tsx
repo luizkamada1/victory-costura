@@ -76,7 +76,10 @@ export default function TicketsPage() {
         setErro(mensagemErro(e));
       }
     })();
-    carregarTickets("");
+    // vindo do quadro de Produção (/tickets?op=123), já abre com a OP buscada
+    const opDaUrl = new URLSearchParams(window.location.search).get("op")?.trim() ?? "";
+    if (opDaUrl) setBuscaOp(opDaUrl);
+    carregarTickets(opDaUrl);
   }, []);
 
   // ao voltar da aba de impressão, atualiza a coluna Impresso sem perder busca e seleção

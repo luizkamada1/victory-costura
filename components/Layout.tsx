@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronsLeft,
   Gauge,
+  KanbanSquare,
   Menu,
   ScanBarcode,
   Scissors,
@@ -25,6 +26,7 @@ const MENU: { grupo: string; itens: ItemMenu[] }[] = [
   {
     grupo: "Dia a dia",
     itens: [
+      { href: "/producao", rotulo: "Produção", icone: KanbanSquare },
       { href: "/apontamento", rotulo: "Apontamento", icone: ScanBarcode },
       { href: "/eficiencia", rotulo: "Eficiência", icone: Gauge },
       { href: "/tickets", rotulo: "Tickets", icone: Ticket },
@@ -92,7 +94,7 @@ export default function ProducaoLayout({
   return (
     <div className="casca" data-recolhido={recolhido} data-gaveta={gaveta} data-pronto={pronto}>
       <aside className="trilho nao-imprimir" aria-label="Menu principal">
-        <Link href="/apontamento" className="trilho-marca">
+        <Link href="/producao" className="trilho-marca">
           <img src="/icon.png" alt="" />
           <div>
             <strong>Victory Pijamas</strong>
