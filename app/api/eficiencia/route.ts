@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { buscarTodos, respostaErro } from "@/lib/producao-api";
+import { calcularPecas } from "@/lib/pecas";
 import { Costureira, Jornada, dataBrasilia, diasEntre, minutosJornada, tipoDaOcorrencia } from "@/lib/producao";
 
 export const runtime = "nodejs";
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
       buscarTodos((de, ate) =>
         supabase
           .from("ticket_operacoes")
-          .select("costureira_id, data_producao, quantidade, minutos_total")
+          .select("ticket_id, costureira_id, data_producao, quantidade, minutos_total")
           .not("costureira_id", "is", null)
           .gte("data_producao", inicio)
           .lte("data_producao", fim)
@@ -165,7 +166,15 @@ export async function GET(req: NextRequest) {
         };
       });
 
-    return NextResponse.json({ costureiras: resultado, ultimoApontado });
+    // peças produzidas (equipe toda), só até o último dia apontado
+    const pecas = await calcularPecas(
+      supabase,
+      producao.map((p) => p.ticket_id),
+      inicio,
+      fim < limite ? fim : limite
+    );
+
+    return NextResponse.json({ costureiras: resultado, ultimoApontado, pecas });
   } catch (err) {
     return respostaErro(err);
   }

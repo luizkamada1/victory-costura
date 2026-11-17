@@ -8,7 +8,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronsLeft,
-  Gauge,
+  LayoutDashboard,
   KanbanSquare,
   Menu,
   ScanBarcode,
@@ -28,7 +28,7 @@ const MENU: { grupo: string; itens: ItemMenu[] }[] = [
     itens: [
       { href: "/producao", rotulo: "Produção", icone: KanbanSquare },
       { href: "/apontamento", rotulo: "Apontamento", icone: ScanBarcode },
-      { href: "/eficiencia", rotulo: "Eficiência", icone: Gauge },
+      { href: "/dashboard", rotulo: "Dashboard", icone: LayoutDashboard },
       { href: "/tickets", rotulo: "Tickets", icone: Ticket },
     ],
   },
