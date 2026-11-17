@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { ChevronRight, Minus, Plus } from "lucide-react";
 import { api, mensagemErro } from "@/components/Layout";
-import type { FilaMaquina } from "@/app/api/fila/route";
+import type { EscopoFila, FilaMaquina, FilaRecorte } from "@/app/api/fila/route";
 import { Costureira, Jornada, formatarMinutos } from "@/lib/producao";
 
 const n1 = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -29,8 +29,8 @@ function distribuir(maquinas: FilaMaquina[], pessoas: number) {
  * e quantas costureiras pôr em cada máquina para a fila andar por igual.
  */
 export default function FilaMaquinas() {
-  const [maquinas, setMaquinas] = useState<FilaMaquina[] | null>(null);
-  const [total, setTotal] = useState(0);
+  const [recortes, setRecortes] = useState<Record<EscopoFila, FilaRecorte> | null>(null);
+  const [escopo, setEscopo] = useState<EscopoFila>("todos");
   const [pessoas, setPessoas] = useState(15);
   const [jornadaDia, setJornadaDia] = useState(510);
   const [erro, setErro] = useState<string | null>(null);
@@ -38,10 +38,9 @@ export default function FilaMaquinas() {
 
   useEffect(() => {
     const carregar = () =>
-      api<{ maquinas: FilaMaquina[]; total: number }>("/api/fila")
+      api<Record<EscopoFila, FilaRecorte>>("/api/fila")
         .then((r) => {
-          setMaquinas(r.maquinas);
-          setTotal(r.total);
+          setRecortes(r);
           setErro(null);
         })
         .catch((e) => setErro(mensagemErro(e)));
@@ -67,15 +66,33 @@ export default function FilaMaquinas() {
     return () => document.removeEventListener("visibilitychange", voltar);
   }, []);
 
+  const recorte = recortes?.[escopo] ?? null;
+  const maquinas = recorte?.maquinas ?? null;
+  const total = recorte?.total ?? 0;
   const lista = maquinas ?? [];
   const maior = Math.max(1, ...lista.map((m) => m.minutos));
   const divisao = distribuir(lista, pessoas);
   const diasFila = pessoas > 0 && jornadaDia > 0 ? total / (pessoas * jornadaDia) : null;
 
   return (
-    <section className="bloco fila-bloco" aria-busy={maquinas === null}>
+    <section className="bloco fila-bloco" aria-busy={recortes === null}>
       <div className="fila-cabecalho">
-        <h2>Pendente por máquina</h2>
+        <div className="fila-titulo">
+          <h2>Pendente por máquina</h2>
+          <div className="periodo-fichas fichas-pequenas" role="group" aria-label="Quais OPs considerar">
+            {(
+              [
+                ["andamento", "Em andamento"],
+                ["aguardando", "Aguardando"],
+                ["todos", "Ambos"],
+              ] as [EscopoFila, string][]
+            ).map(([id, rotulo]) => (
+              <button key={id} type="button" className="ficha" aria-pressed={escopo === id} onClick={() => setEscopo(id)}>
+                {rotulo}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="fila-pessoas">
           <span className="fraco">Costureiras hoje</span>
           <div className="contador">
@@ -95,7 +112,7 @@ export default function FilaMaquinas() {
           </div>
           {diasFila !== null && lista.length > 0 && (
             <span className="fila-resumo num">
-              {formatarMinutos(total)} na fila · <strong>{n1(diasFila)} {diasFila >= 0.95 && diasFila < 1.05 ? "dia" : "dias"}</strong>{" "}
+              {(recorte?.pecas ?? 0).toLocaleString("pt-BR")} peças · <strong>{n1(diasFila)} {diasFila >= 0.95 && diasFila < 1.05 ? "dia" : "dias"}</strong>{" "}
               de trabalho
             </span>
           )}
@@ -103,8 +120,16 @@ export default function FilaMaquinas() {
       </div>
 
       {erro && <p className="fraco">{erro}</p>}
-      {maquinas !== null && lista.length === 0 && <div className="vazio">Nada na fila: todos os cupons foram apontados.</div>}
-      {maquinas === null && !erro && <div className="vazio">Carregando…</div>}
+      {recortes !== null && lista.length === 0 && (
+        <div className="vazio">
+          {escopo === "andamento"
+            ? "Nenhuma OP em andamento com cupons faltando."
+            : escopo === "aguardando"
+              ? "Nenhuma OP aguardando."
+              : "Nada na fila: todos os cupons foram apontados."}
+        </div>
+      )}
+      {recortes === null && !erro && <div className="vazio">Carregando…</div>}
 
       {lista.length > 0 && (
         <>
