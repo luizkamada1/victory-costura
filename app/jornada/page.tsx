@@ -1,20 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ClipboardPaste, Copy, Plus, Search, Trash2, X } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import { TituloRecolhivel } from "@/components/Recolhivel";
 import {
   Costureira,
   DIAS_SEMANA,
+  HorariosSemana,
   Jornada,
   Ocorrencia,
   diaSemana,
   formatarData,
   formatarMinutos,
   hojeISO,
+  minutosDosPeriodos,
   minutosJornada,
+  problemaHorarios,
 } from "@/lib/producao";
 
 type FormOcorrencia = {
@@ -43,15 +46,29 @@ export default function JornadaPage() {
   const [sucesso, setSucesso] = useState<string | null>(null);
   // fechada por padrão, para ninguém mudar a jornada sem querer
   const [jornadaAberta, setJornadaAberta] = useState(false);
+  // horários sendo editados; os minutos salvos (jornada) só mudam ao salvar
+  const [horarios, setHorarios] = useState<HorariosSemana>({});
+  const [semHorarios, setSemHorarios] = useState<Record<string, boolean>>({});
+  const [copiado, setCopiado] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const [j, c] = await Promise.all([
-          api<{ jornada: Jornada }>("/api/jornada"),
+          api<{ jornada: Jornada; horarios?: Record<string, HorariosSemana[string] | null> }>("/api/jornada"),
           api<{ costureiras: Costureira[] }>("/api/costureiras"),
         ]);
         setJornada(j.jornada);
+        const h: HorariosSemana = {};
+        const sem: Record<string, boolean> = {};
+        for (let d = 0; d < 7; d++) {
+          const salvos = j.horarios?.[String(d)];
+          h[String(d)] = salvos ?? [];
+          // dia com minutos mas ainda sem horários cadastrados
+          sem[String(d)] = !salvos && (j.jornada[String(d)] ?? 0) > 0;
+        }
+        setHorarios(h);
+        setSemHorarios(sem);
         setCostureiras(c.costureiras);
       } catch (e) {
         setErro(mensagemErro(e));
@@ -77,8 +94,26 @@ export default function JornadaPage() {
   async function salvarJornada(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
+    // um dia que tem minutos mas ainda não tem horários ficaria zerado ao salvar
+    const faltando = [1, 2, 3, 4, 5, 6, 0].filter((d) => semHorarios[String(d)]).map((d) => DIAS_SEMANA[d]);
+    if (faltando.length) {
+      setErro(`Cadastre os horários de ${faltando.join(", ")} antes de salvar (sem horários, o dia ficaria com 0 minutos).`);
+      return;
+    }
+    for (let d = 0; d < 7; d++) {
+      const problema = problemaHorarios(horarios[String(d)] ?? []);
+      if (problema) {
+        setErro(`${DIAS_SEMANA[d]}: ${problema}`);
+        return;
+      }
+    }
     try {
-      await api("/api/jornada", { method: "POST", body: JSON.stringify({ jornada }) });
+      await api("/api/jornada", { method: "POST", body: JSON.stringify({ horarios }) });
+      const novos: Jornada = {};
+      for (let d = 0; d < 7; d++) novos[String(d)] = minutosDosPeriodos(horarios[String(d)] ?? []);
+      setJornada(novos);
+      setSemHorarios({});
+      setCopiado(null);
       setSucesso("Jornada padrão salva. Vale para todas as costureiras sem jornada própria.");
       setTimeout(() => setSucesso(null), 4000);
     } catch (e) {
@@ -143,6 +178,14 @@ export default function JornadaPage() {
   const nomeCostureira = (id: number | null) =>
     id ? costureiras.find((c) => c.id === id)?.nome ?? `#${id}` : "Todas as costureiras";
   const totalSemana = Object.values(jornada).reduce((s, v) => s + (Number(v) || 0), 0);
+  const totalEditado = Array.from({ length: 7 }, (_, d) =>
+    semHorarios[String(d)] ? jornada[String(d)] ?? 0 : minutosDosPeriodos(horarios[String(d)] ?? [])
+  ).reduce((a, b) => a + b, 0);
+
+  function mudarPeriodos(dia: string, periodos: HorariosSemana[string]) {
+    setHorarios((h) => ({ ...h, [dia]: periodos }));
+    setSemHorarios((s) => ({ ...s, [dia]: false }));
+  }
   const tabela = useTabela<Ocorrencia>(
     ocorrencias,
     [
@@ -167,8 +210,8 @@ export default function JornadaPage() {
               Jornada padrão
             </TituloRecolhivel>
             <p className="bloco-descricao" style={{ marginTop: 6 }}>
-              {jornadaAberta ? "Minutos por dia da semana. " : ""}Total:{" "}
-              <span className="num">{formatarMinutos(totalSemana)}</span> por semana
+              {jornadaAberta ? "Horários de trabalho de cada dia; os minutos são calculados. " : ""}Total:{" "}
+              <span className="num">{formatarMinutos(jornadaAberta ? totalEditado : totalSemana)}</span> por semana
               {jornadaAberta ? "." : " · clique no título para ver ou alterar."}
             </p>
           </div>
@@ -179,21 +222,98 @@ export default function JornadaPage() {
           )}
         </div>
         {jornadaAberta && (
-        <div className="campos grade-dias">
-          {DIAS_SEMANA.map((nome, d) => (
-            <label key={d} className="campo">
-              <span>{nome}</span>
-              <input
-                type="number"
-                min={0}
-                className="entrada num"
-                value={jornada[String(d)] ?? 0}
-                onChange={(e) => setJornada({ ...jornada, [String(d)]: Number(e.target.value) })}
-              />
-              <small className="num">{formatarMinutos(jornada[String(d)] ?? 0)}</small>
-            </label>
-          ))}
-        </div>
+          <div className="horarios">
+            {[1, 2, 3, 4, 5, 6, 0].map((d) => {
+              const dia = String(d);
+              const periodos = horarios[dia] ?? [];
+              const minutos = minutosDosPeriodos(periodos);
+              const problema = problemaHorarios(periodos);
+              const ultimoFim = periodos[periodos.length - 1]?.[1];
+              return (
+                <div key={d} className="horario-dia">
+                  <div className="horario-nome">{DIAS_SEMANA[d]}</div>
+                  <div className="horario-periodos">
+                    {periodos.length === 0 && (
+                      <span className="fraco horario-folga">
+                        {semHorarios[dia]
+                          ? `Sem horários cadastrados (hoje vale ${jornada[dia]} min)`
+                          : "Folga"}
+                      </span>
+                    )}
+                    {periodos.map(([ini, fim], i) => (
+                      <span key={i} className="horario-periodo">
+                        <input
+                          type="time"
+                          className="entrada num"
+                          aria-label={`${DIAS_SEMANA[d]}, início do período ${i + 1}`}
+                          value={ini}
+                          onChange={(e) =>
+                            mudarPeriodos(dia, periodos.map((p, j) => (j === i ? [e.target.value, p[1]] : p)))
+                          }
+                        />
+                        <span className="fraco">às</span>
+                        <input
+                          type="time"
+                          className="entrada num"
+                          aria-label={`${DIAS_SEMANA[d]}, fim do período ${i + 1}`}
+                          value={fim}
+                          onChange={(e) =>
+                            mudarPeriodos(dia, periodos.map((p, j) => (j === i ? [p[0], e.target.value] : p)))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="botao botao-pequeno botao-icone botao-fantasma"
+                          aria-label={`Tirar o período ${ini} às ${fim}`}
+                          title="Tirar período"
+                          onClick={() => mudarPeriodos(dia, periodos.filter((_, j) => j !== i))}
+                        >
+                          <X size={14} aria-hidden />
+                        </button>
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      className="botao botao-pequeno botao-fantasma"
+                      onClick={() => mudarPeriodos(dia, [...periodos, [ultimoFim ?? "07:30", ""]])}
+                    >
+                      <Plus size={14} aria-hidden />
+                      Período
+                    </button>
+                    {problema && <span className="horario-erro">{problema}</span>}
+                  </div>
+                  <div className="horario-total">
+                    <strong className="num">{formatarMinutos(semHorarios[dia] ? jornada[dia] ?? 0 : minutos)}</strong>
+                    <span className="fraco num">{semHorarios[dia] ? jornada[dia] ?? 0 : minutos} min</span>
+                  </div>
+                  <div className="horario-copiar">
+                    {copiado === null ? (
+                      periodos.length > 0 && (
+                        <button type="button" className="botao botao-pequeno botao-fantasma" onClick={() => setCopiado(dia)} title="Copiar estes horários para outros dias">
+                          <Copy size={14} aria-hidden />
+                          Copiar
+                        </button>
+                      )
+                    ) : copiado === dia ? (
+                      <button type="button" className="botao botao-pequeno botao-contorno" onClick={() => setCopiado(null)}>
+                        Pronto
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="botao botao-pequeno botao-fantasma"
+                        onClick={() => mudarPeriodos(dia, (horarios[copiado] ?? []).map((p) => [p[0], p[1]]))}
+                        title={`Colar os horários de ${DIAS_SEMANA[Number(copiado)]}`}
+                      >
+                        <ClipboardPaste size={14} aria-hidden />
+                        Colar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </form>
 

@@ -165,3 +165,42 @@ export function corEficiencia(ef: number | null) {
   if (ef >= 0.65) return "var(--alerta)";
   return "var(--erro)";
 }
+
+// Horários de trabalho de um dia: lista de [início, fim] em "HH:MM"
+export type Periodo = [string, string];
+export type HorariosSemana = Record<string, Periodo[]>;
+
+export function minutosDoHorario(hhmm: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+// Confere os períodos de um dia: cada um termina depois de começar e eles não se sobrepõem
+export function problemaHorarios(periodos: Periodo[]): string | null {
+  const faixas: [number, number][] = [];
+  for (const [ini, fim] of periodos) {
+    const a = minutosDoHorario(ini);
+    const b = minutosDoHorario(fim);
+    if (a === null || b === null) return "Preencha início e fim de cada período.";
+    if (b <= a) return `O período ${ini} a ${fim} termina antes de começar.`;
+    faixas.push([a, b]);
+  }
+  faixas.sort((x, y) => x[0] - y[0]);
+  for (let i = 1; i < faixas.length; i++) {
+    if (faixas[i][0] < faixas[i - 1][1]) return "Há períodos que se sobrepõem.";
+  }
+  return null;
+}
+
+// Minutos trabalhados no dia (soma dos períodos válidos)
+export function minutosDosPeriodos(periodos: Periodo[]): number {
+  return periodos.reduce((s, [ini, fim]) => {
+    const a = minutosDoHorario(ini);
+    const b = minutosDoHorario(fim);
+    return a !== null && b !== null && b > a ? s + (b - a) : s;
+  }, 0);
+}

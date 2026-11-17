@@ -119,3 +119,7 @@ alter table tickets add column if not exists impresso_em timestamptz;
 
 -- Coleção do item (ex: Inverno 2027)
 alter table itens add column if not exists colecao text;
+
+-- Horários de trabalho da jornada padrão, por dia: [["07:30","09:30"],["09:45","12:00"],...]
+-- Os minutos do dia são calculados a partir deles.
+alter table jornada_padrao add column if not exists horarios jsonb;
