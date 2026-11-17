@@ -1939,3 +1939,147 @@ input[type="number"]::-webkit-inner-spin-button {
       "botao botao";
   }
 }
+
+/* jornada: escolher várias costureiras de uma vez */
+.seletor {
+  position: relative;
+}
+
+.seletor-botao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.seletor-botao > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seletor-botao svg {
+  flex-shrink: 0;
+  color: var(--tinta-3);
+}
+
+.seletor-painel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max(100%, 300px);
+  padding: 10px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(29, 29, 31, 0.14), 0 1px 3px rgba(29, 29, 31, 0.08);
+  transform-origin: top left;
+  animation: seletor-abrir 140ms ease-out;
+}
+
+@keyframes seletor-abrir {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+}
+
+.seletor-busca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin-bottom: 6px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--rosa-fundo);
+  color: var(--tinta-3);
+}
+
+.seletor-busca input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--tinta);
+}
+
+.seletor-painel ul {
+  max-height: 280px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.seletor-opcao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--tinta);
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .seletor-opcao:hover {
+    background: var(--rosa-fundo);
+  }
+}
+
+.seletor-caixa {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--rosa-nervura);
+  border-radius: 5px;
+  color: #fff;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.seletor-radio {
+  border-radius: 50%;
+}
+
+.seletor-opcao[data-marcada="true"] .seletor-caixa {
+  background: var(--rosa-escuro);
+  border-color: var(--rosa-escuro);
+}
+
+.seletor-separador {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--regua);
+}
+
+.seletor-vazio {
+  padding: 10px 8px;
+  font-size: 13.5px;
+}
+
+.seletor-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--regua);
+  font-size: 12.5px;
+}

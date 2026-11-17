@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronDown, Plus, Search, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
+import { TituloRecolhivel } from "@/components/Recolhivel";
 import {
   Costureira,
   DIAS_SEMANA,
@@ -18,7 +19,8 @@ import {
 
 type FormOcorrencia = {
   data: string;
-  costureira_id: string;
+  costureiras: number[]; // vazio = fábrica toda
+  diaInteiro: boolean; // minutos = a jornada do dia de cada costureira
   sentido: "reduzir" | "aumentar";
   minutos: string;
   descricao: string;
@@ -31,13 +33,16 @@ export default function JornadaPage() {
   const [mes, setMes] = useState(hojeISO().slice(0, 7));
   const [form, setForm] = useState<FormOcorrencia>({
     data: hojeISO(),
-    costureira_id: "",
+    costureiras: [],
+    diaInteiro: false,
     sentido: "reduzir",
     minutos: "",
     descricao: "",
   });
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
+  // fechada por padrão, para ninguém mudar a jornada sem querer
+  const [jornadaAberta, setJornadaAberta] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -81,29 +86,43 @@ export default function JornadaPage() {
     }
   }
 
-  // Minutos da jornada do dia escolhido (da costureira, ou padrão se "todas")
-  const costureiraForm = costureiras.find((c) => String(c.id) === form.costureira_id);
-  const jornadaDoDia = form.data
-    ? costureiraForm
-      ? minutosJornada(costureiraForm, jornada, form.data)
-      : Number(jornada[String(diaSemana(form.data))] ?? 0)
-    : 0;
+  // Minutos da jornada do dia escolhido para cada costureira marcada (ou a padrão, para a fábrica toda)
+  const escolhidas = costureiras.filter((c) => form.costureiras.includes(c.id));
+  const jornadaDe = (c: Costureira) => (form.data ? minutosJornada(c, jornada, form.data) : 0);
+  const jornadasDoDia = escolhidas.length
+    ? escolhidas.map(jornadaDe)
+    : [form.data ? Number(jornada[String(diaSemana(form.data))] ?? 0) : 0];
+  const jornadaDoDia = Math.max(...jornadasDoDia);
+  const jornadaVaria = new Set(jornadasDoDia).size > 1;
 
   async function salvarOcorrencia(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
-    const minutos = Math.abs(Number(form.minutos)) * (form.sentido === "reduzir" ? -1 : 1);
+    const sinal = form.sentido === "reduzir" ? -1 : 1;
+    const minutos = Math.abs(form.diaInteiro ? jornadaDoDia : Number(form.minutos)) * sinal;
+    // "dia inteiro": cada costureira perde a jornada dela naquele dia
+    if (form.diaInteiro && escolhidas.some((c) => jornadaDe(c) === 0)) {
+      const sem = escolhidas.filter((c) => jornadaDe(c) === 0).map((c) => c.nome);
+      setErro(`Sem jornada neste dia: ${sem.join(", ")}. Desmarque ${sem.length === 1 ? "essa costureira" : "essas costureiras"}.`);
+      return;
+    }
+    const minutosPorCostureira = form.diaInteiro
+      ? Object.fromEntries(escolhidas.map((c) => [c.id, jornadaDe(c) * sinal]))
+      : undefined;
     try {
-      await api("/api/ocorrencias", {
+      const r = await api<{ criadas: number }>("/api/ocorrencias", {
         method: "POST",
         body: JSON.stringify({
           data: form.data,
-          costureira_id: form.costureira_id || null,
+          costureira_ids: form.costureiras,
           minutos,
+          minutos_por_costureira: minutosPorCostureira,
           descricao: form.descricao,
         }),
       });
-      setForm({ ...form, minutos: "", descricao: "" });
+      setForm({ ...form, minutos: "", descricao: "", diaInteiro: false, costureiras: [] });
+      setSucesso(r.criadas > 1 ? `${r.criadas} ocorrências registradas, uma para cada costureira.` : "Ocorrência registrada.");
+      setTimeout(() => setSucesso(null), 4000);
       if (form.data.slice(0, 7) !== mes) setMes(form.data.slice(0, 7));
       else await carregarOcorrencias();
     } catch (e) {
@@ -142,17 +161,24 @@ export default function JornadaPage() {
       {sucesso && <Aviso tipo="ok">{sucesso}</Aviso>}
 
       <form className="bloco" onSubmit={salvarJornada}>
-        <div className="bloco-cabecalho">
+        <div className="bloco-cabecalho" style={jornadaAberta ? undefined : { marginBottom: 0 }}>
           <div>
-            <h2>Jornada padrão</h2>
-            <p className="bloco-descricao">
-              Minutos por dia da semana. Total: <span className="num">{formatarMinutos(totalSemana)}</span> por semana.
+            <TituloRecolhivel aberto={jornadaAberta} onAlternar={() => setJornadaAberta((v) => !v)}>
+              Jornada padrão
+            </TituloRecolhivel>
+            <p className="bloco-descricao" style={{ marginTop: 6 }}>
+              {jornadaAberta ? "Minutos por dia da semana. " : ""}Total:{" "}
+              <span className="num">{formatarMinutos(totalSemana)}</span> por semana
+              {jornadaAberta ? "." : " · clique no título para ver ou alterar."}
             </p>
           </div>
-          <button type="submit" className="botao botao-primario">
-            Salvar jornada
-          </button>
+          {jornadaAberta && (
+            <button type="submit" className="botao botao-primario">
+              Salvar jornada
+            </button>
+          )}
         </div>
+        {jornadaAberta && (
         <div className="campos grade-dias">
           {DIAS_SEMANA.map((nome, d) => (
             <label key={d} className="campo">
@@ -168,6 +194,7 @@ export default function JornadaPage() {
             </label>
           ))}
         </div>
+        )}
       </form>
 
       <form className="bloco" onSubmit={salvarOcorrencia}>
@@ -184,19 +211,14 @@ export default function JornadaPage() {
             <span>Dia</span>
             <input type="date" className="entrada" value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} />
           </label>
-          <label className="campo">
-            <span>Costureira</span>
-            <select className="entrada" value={form.costureira_id} onChange={(e) => setForm({ ...form, costureira_id: e.target.value })}>
-              <option value="">Todas as costureiras</option>
-              {costureiras
-                .filter((c) => c.ativa)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-            </select>
-          </label>
+          <div className="campo">
+            <span id="rotulo-costureiras">Costureiras</span>
+            <SeletorCostureiras
+              costureiras={costureiras.filter((c) => c.ativa)}
+              marcadas={form.costureiras}
+              onMudar={(ids) => setForm((f) => ({ ...f, costureiras: ids }))}
+            />
+          </div>
           <label className="campo">
             <span>Efeito</span>
             <select
@@ -214,11 +236,18 @@ export default function JornadaPage() {
               type="number"
               min={1}
               className="entrada num"
-              value={form.minutos}
-              onChange={(e) => setForm({ ...form, minutos: e.target.value })}
+              value={form.diaInteiro ? (jornadaVaria ? "" : String(jornadaDoDia)) : form.minutos}
+              placeholder={form.diaInteiro && jornadaVaria ? "jornada de cada uma" : undefined}
+              onChange={(e) => setForm({ ...form, minutos: e.target.value, diaInteiro: false })}
             />
             <small>
-              Jornada do dia: <span className="num">{jornadaDoDia}</span> min
+              {jornadaVaria ? (
+                <>A jornada do dia varia entre elas</>
+              ) : (
+                <>
+                  Jornada do dia: <span className="num">{jornadaDoDia}</span> min
+                </>
+              )}
               {jornadaDoDia > 0 && (
                 <>
                   {" · "}
@@ -230,7 +259,8 @@ export default function JornadaPage() {
                         ...form,
                         sentido: "reduzir",
                         minutos: String(jornadaDoDia),
-                        descricao: form.descricao || (form.costureira_id ? "Falta" : "Sem expediente"),
+                        diaInteiro: true,
+                        descricao: form.descricao || (form.costureiras.length ? "Falta" : "Sem expediente"),
                       })
                     }
                   >
@@ -252,7 +282,7 @@ export default function JornadaPage() {
         </div>
         <button type="submit" className="botao botao-primario" style={{ marginTop: 6 }}>
           <Plus size={16} aria-hidden />
-          Registrar ocorrência
+          {form.costureiras.length > 1 ? `Registrar para ${form.costureiras.length} costureiras` : "Registrar ocorrência"}
         </button>
       </form>
 
@@ -312,5 +342,107 @@ export default function JornadaPage() {
         )}
       </section>
     </ProducaoLayout>
+  );
+}
+
+
+// Campo para marcar uma, várias ou nenhuma costureira (nenhuma = a fábrica toda).
+// Abre uma lista com busca; cada costureira marcada recebe a sua própria ocorrência.
+function SeletorCostureiras({
+  costureiras,
+  marcadas,
+  onMudar,
+}: {
+  costureiras: Costureira[];
+  marcadas: number[];
+  onMudar: (ids: number[]) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState("");
+  const caixa = useRef<HTMLDivElement>(null);
+  const campoBusca = useRef<HTMLInputElement>(null);
+
+  // fecha ao clicar fora ou apertar Esc
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      if (!caixa.current?.contains(e.target as Node)) setAberto(false);
+    };
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAberto(false);
+    };
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", tecla);
+    campoBusca.current?.focus();
+    return () => {
+      document.removeEventListener("mousedown", fora);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [aberto]);
+
+  const normal = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const lista = costureiras.filter((c) => normal(c.nome).includes(normal(busca.trim())));
+  const nomes = costureiras.filter((c) => marcadas.includes(c.id)).map((c) => c.nome);
+  const resumo =
+    nomes.length === 0 ? "Fábrica toda (todas as costureiras)" : nomes.length <= 2 ? nomes.join(", ") : `${nomes.length} costureiras`;
+
+  function alternar(id: number) {
+    onMudar(marcadas.includes(id) ? marcadas.filter((x) => x !== id) : [...marcadas, id]);
+  }
+
+  return (
+    <div className="seletor" ref={caixa}>
+      <button
+        type="button"
+        className="entrada seletor-botao"
+        aria-haspopup="listbox"
+        aria-expanded={aberto}
+        aria-labelledby="rotulo-costureiras"
+        title={nomes.join(", ") || undefined}
+        onClick={() => setAberto((v) => !v)}
+      >
+        <span className={nomes.length ? undefined : "fraco"}>{resumo}</span>
+        <ChevronDown size={16} aria-hidden />
+      </button>
+      {aberto && (
+        <div className="seletor-painel">
+          <label className="seletor-busca">
+            <Search size={15} aria-hidden />
+            <input ref={campoBusca} placeholder="Buscar costureira" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          </label>
+          <ul role="listbox" aria-multiselectable="true" aria-labelledby="rotulo-costureiras">
+            <li role="option" aria-selected={marcadas.length === 0}>
+              <button type="button" className="seletor-opcao" data-marcada={marcadas.length === 0} onClick={() => onMudar([])}>
+                <span className="seletor-caixa seletor-radio">{marcadas.length === 0 && <Check size={13} aria-hidden />}</span>
+                <span>
+                  Fábrica toda <span className="fraco">· falta de luz, sem expediente</span>
+                </span>
+              </button>
+            </li>
+            <li className="seletor-separador" aria-hidden />
+            {lista.map((c) => {
+              const marcada = marcadas.includes(c.id);
+              return (
+                <li key={c.id} role="option" aria-selected={marcada}>
+                  <button type="button" className="seletor-opcao" data-marcada={marcada} onClick={() => alternar(c.id)}>
+                    <span className="seletor-caixa">{marcada && <Check size={13} aria-hidden />}</span>
+                    {c.nome}
+                  </button>
+                </li>
+              );
+            })}
+            {lista.length === 0 && <li className="fraco seletor-vazio">Nenhuma costureira encontrada.</li>}
+          </ul>
+          <div className="seletor-rodape">
+            <span className="fraco">
+              {marcadas.length ? `${marcadas.length} marcada${marcadas.length > 1 ? "s" : ""}` : "Nenhuma marcada"}
+            </span>
+            <button type="button" className="botao botao-pequeno botao-contorno" onClick={() => setAberto(false)}>
+              Pronto
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
