@@ -350,10 +350,6 @@ export default function DashboardPage() {
                 <Indicador rotulo="Eficiência" dica={DICA_EFICIENCIA} valor={efPeriodo} classe="legenda-ef" />
                 <Indicador rotulo="Produtividade" dica={DICA_PRODUTIVIDADE} valor={prodPeriodo} classe="legenda-prod" />
               </div>
-              <p className="bloco-descricao num" style={{ marginTop: 14 }}>
-                {formatarMinutos(totalProd)} produzidos de {formatarMinutos(totalDisp)} disponíveis
-                {totalAus > 0 ? ` · ${formatarMinutos(totalAus)} de ausências` : ""}
-              </p>
             </section>
 
             <section className="bloco" aria-busy={carregando}>
@@ -415,32 +411,10 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              {pecas && pecas.porReferencia.length > 0 && (
-                <>
-                  <p className="indicador-rotulo" style={{ marginTop: 16 }}>
-                    Mais produzidas
-                  </p>
-                  <ul className="lista-referencias">
-                    {pecas.porReferencia.slice(0, 5).map((r) => (
-                      <li key={r.referencia}>
-                        <span className="quebra">
-                          <span className="num">{r.referencia}</span>
-                          {r.nome ? <span className="fraco"> · {r.nome}</span> : null}
-                        </span>
-                        <strong className="num">{r.pecas.toLocaleString("pt-BR")}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
             </section>
 
             <section className="bloco" aria-busy={carregando}>
-              <h2>Peças por dia</h2>
-              <p className="bloco-descricao" style={{ marginBottom: 12 }}>
-                A peça conta no dia em que o último cupom dela é apontado; o pijama, quando a parte de cima e a de
-                baixo ficam prontas.
-              </p>
+              <h2 style={{ marginBottom: 12 }}>Peças por dia</h2>
               <GraficoPecas dias={pecas?.porDia ?? []} carregando={carregando} />
             </section>
           </div>
@@ -451,8 +425,7 @@ export default function DashboardPage() {
                 <h2>Comparativo por costureira</h2>
                 <p className="bloco-descricao">
                   Entre {formatarData(inicio)} e {formatarData(fim)}
-                  {tabela.filtrando ? ", costureiras filtradas" : ""}. A diferença entre as duas barras é o peso das
-                  ausências. Passe o mouse numa costureira para ver os valores.
+                  {tabela.filtrando ? ", costureiras filtradas" : ""}.
                 </p>
               </div>
               <div className="ordem-grafico">
