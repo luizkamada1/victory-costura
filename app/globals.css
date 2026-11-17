@@ -1366,21 +1366,8 @@ input[type="checkbox"] {
   font-size: 17px;
 }
 
-.grafico-costureira {
-  /* não alarga a tabela: ocupa só a largura que a célula já tem */
-  box-sizing: border-box;
-  width: 0;
-  min-width: 100%;
-  margin: 4px 0 18px;
-  padding: 16px 18px 12px;
-  border-radius: var(--raio);
-  background: #fff;
-}
-
-.grafico-costureira h3 {
-  margin: 0 0 10px;
-  font-size: 14px;
-  font-weight: 600;
+.campo-grafico {
+  min-width: 190px;
 }
 
 .eficiencia-topo {

@@ -84,7 +84,8 @@ const PRESETS: [string, string][] = [
   ["mes-passado", "Mês passado"],
 ];
 
-const CHAVE_RESUMO = "costura:eficiencia-resumo-recolhido";
+// "1" = o usuário deixou o resumo aberto; sem nada salvo, começa fechado
+const CHAVE_RESUMO = "costura:eficiencia-resumo-aberto";
 
 // dias que entram no gráfico: com produção e com tempo disponível
 const apurados = (dias: PontoEficiencia[]) =>
@@ -104,18 +105,20 @@ export default function EficienciaPage() {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
-  const [resumoAberto, setResumoAberto] = useState(true);
+  const [resumoAberto, setResumoAberto] = useState(false);
+  // costureira do gráfico "Eficiência por dia" (null = equipe)
+  const [costureiraGrafico, setCostureiraGrafico] = useState<number | null>(null);
 
-  // lembra neste navegador se o resumo foi recolhido
+  // lembra neste navegador se o resumo foi aberto
   useEffect(() => {
     try {
-      if (localStorage.getItem(CHAVE_RESUMO) === "1") setResumoAberto(false);
+      if (localStorage.getItem(CHAVE_RESUMO) === "1") setResumoAberto(true);
     } catch {}
   }, []);
   function alternarResumo() {
     setResumoAberto((v) => {
       try {
-        localStorage.setItem(CHAVE_RESUMO, v ? "1" : "0");
+        localStorage.setItem(CHAVE_RESUMO, v ? "0" : "1");
       } catch {}
       return !v;
     });
@@ -189,6 +192,8 @@ export default function EficienciaPage() {
     }
   }
   const diasApurados = apurados(Array.from(porDia.values()));
+  const escolhida = linhas.find((l) => l.id === costureiraGrafico) ?? null;
+  const pontosGrafico = escolhida ? apurados(escolhida.dias) : diasApurados;
   const situacao =
     efPeriodo === null
       ? null
@@ -352,13 +357,33 @@ export default function EficienciaPage() {
           </section>
 
           <section className="bloco" aria-busy={carregando}>
-            <h2>Eficiência por dia</h2>
-            <p className="bloco-descricao" style={{ marginBottom: 12 }}>
-              Dias com produção entre {formatarData(inicio)} e{" "}
-              {formatarData(fim)}
-              {tabela.filtrando ? ", costureiras filtradas" : ""}.
-            </p>
-            <GraficoEficiencia pontos={diasApurados} carregando={carregando} />
+            <div className="bloco-cabecalho" style={{ alignItems: "flex-start", marginBottom: 12 }}>
+              <div>
+                <h2>Eficiência por dia</h2>
+                <p className="bloco-descricao">
+                  Dias com produção entre {formatarData(inicio)} e {formatarData(fim)}
+                  {escolhida ? ` · ${escolhida.nome}` : tabela.filtrando ? ", costureiras filtradas" : ""}.
+                </p>
+              </div>
+              <label className="campo campo-grafico">
+                <span>Costureira</span>
+                <select
+                  className="entrada"
+                  value={escolhida ? String(escolhida.id) : ""}
+                  onChange={(e) => setCostureiraGrafico(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">{tabela.filtrando ? "Costureiras filtradas" : "Toda a equipe"}</option>
+                  {[...linhas]
+                    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.nome}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <GraficoEficiencia pontos={pontosGrafico} carregando={carregando} nome={escolhida?.nome} />
           </section>
         </div>
       )}
@@ -368,7 +393,7 @@ export default function EficienciaPage() {
           <div>
             <h2>Por costureira</h2>
             <p className="bloco-descricao">
-              Clique numa linha para ver o gráfico e o dia a dia da costureira.
+              Clique numa linha para ver o dia a dia da costureira.
               Todas as barras usam a mesma régua; o traço marca 100%.
             </p>
           </div>
@@ -427,17 +452,7 @@ export default function EficienciaPage() {
                       <tr className="detalhe">
                         <td colSpan={6} style={{ padding: "8px 20px 16px" }}>
                           {l.dias.length ? (
-                            <>
-                              <div className="grafico-costureira">
-                                <h3>Eficiência por dia · {l.nome}</h3>
-                                <GraficoEficiencia
-                                  pontos={apurados(l.dias)}
-                                  carregando={carregando}
-                                  nome={l.nome}
-                                />
-                              </div>
-                              <DetalheDias dias={l.dias} />
-                            </>
+                            <DetalheDias dias={l.dias} />
                           ) : (
                             <div className="vazio">
                               Sem jornada nem produção neste período.
