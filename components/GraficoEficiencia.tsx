@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { DIAS_SEMANA, diaSemana, formatarMinutos } from "@/lib/producao";
 import { pct } from "@/components/Medidas";
 
-export type PontoEficiencia = { data: string; produzido: number; disponivel: number };
+// previsto: base da produtividade (sem descontar ausências); quando vem, o gráfico desenha as duas linhas
+export type PontoEficiencia = { data: string; produzido: number; disponivel: number; previsto?: number };
 
 const ALTURA = 240;
 const M = { topo: 18, direita: 56, baixo: 30, esquerda: 44 };
@@ -49,15 +50,18 @@ export default function GraficoEficiencia({
   }
 
   const valores = pontos.map((p) => (p.disponivel > 0 ? (p.produzido / p.disponivel) * 100 : 0));
+  const comProd = pontos.some((p) => p.previsto !== undefined);
+  const valoresProd = pontos.map((p) => (p.previsto ? (p.produzido / p.previsto) * 100 : 0));
   // eixo de 0 até pelo menos 125%, em passos de 25
-  const topo = Math.max(125, Math.ceil(Math.max(...valores) / 25) * 25);
+  const topo = Math.max(125, Math.ceil(Math.max(...valores, ...(comProd ? valoresProd : [])) / 25) * 25);
   const marcas = Array.from({ length: topo / 25 + 1 }, (_, i) => i * 25);
 
   const larguraUtil = largura - M.esquerda - M.direita;
   const alturaUtil = ALTURA - M.topo - M.baixo;
   const x = (i: number) => M.esquerda + (pontos.length === 1 ? larguraUtil / 2 : (i / (pontos.length - 1)) * larguraUtil);
   const y = (v: number) => M.topo + alturaUtil - (v / topo) * alturaUtil;
-  const caminho = valores.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const linha = (vs: number[]) => vs.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const caminho = linha(valores);
   const ultimo = pontos.length - 1;
   // cada data ocupa uns 46px; com mais dias do que cabe, mostra uma a cada N
   const passoDatas = Math.max(1, Math.ceil((pontos.length * 46) / larguraUtil));
@@ -120,6 +124,14 @@ export default function GraficoEficiencia({
 
         {ativo !== null && <line x1={x(ativo)} x2={x(ativo)} y1={M.topo} y2={M.topo + alturaUtil} className="grafico-mira" />}
 
+        {comProd && (
+          <>
+            <path d={linha(valoresProd)} className="grafico-linha grafico-linha-prod" />
+            {valoresProd.map((v, i) => (
+              <circle key={i} cx={x(i)} cy={y(v)} r={ativo === i ? 5 : 3} className="grafico-ponto grafico-ponto-prod" />
+            ))}
+          </>
+        )}
         <path d={caminho} className="grafico-linha" />
         {valores.map((v, i) => (
           <circle key={i} cx={x(i)} cy={y(v)} r={ativo === i ? 6 : 4} className="grafico-ponto" />
@@ -141,8 +153,19 @@ export default function GraficoEficiencia({
       </svg>
 
       {p && ativo !== null && (
-        <div className="grafico-dica" style={{ left: dicaEsquerda, top: Math.max(0, y(valores[ativo]) - 78) }}>
-          <strong>{pct(valores[ativo] / 100)}</strong>
+        <div className="grafico-dica" style={{ left: dicaEsquerda, top: Math.max(0, y(valores[ativo]) - (comProd ? 104 : 78)) }}>
+          {comProd ? (
+            <>
+              <span className="dica-linha">
+                <i className="legenda-ef" /> Eficiência <b>{pct(valores[ativo] / 100)}</b>
+              </span>
+              <span className="dica-linha">
+                <i className="legenda-prod" /> Produtividade <b>{pct(valoresProd[ativo] / 100)}</b>
+              </span>
+            </>
+          ) : (
+            <strong>{pct(valores[ativo] / 100)}</strong>
+          )}
           <span>
             {diaMes(p.data)} · {DIAS_SEMANA[diaSemana(p.data)]}
           </span>

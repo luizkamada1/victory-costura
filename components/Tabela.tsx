@@ -154,10 +154,12 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
                     className="botao botao-pequeno botao-secundario"
                     onClick={() => setMostrarFiltros((v) => !v)}
                     aria-expanded={mostrarFiltros}
+                    title={mostrarFiltros ? "Ocultar filtros" : "Filtrar"}
                     style={filtrosAtivos ? { background: "var(--rosa-claro)", color: "var(--rosa-escuro)" } : undefined}
                   >
                     <ListFilter size={14} aria-hidden />
-                    {mostrarFiltros ? "Ocultar" : "Filtrar"}
+                    {/* em telas médias fica só o ícone */}
+                    <span className="rotulo-filtro">{mostrarFiltros ? "Ocultar" : "Filtrar"}</span>
                     {filtrosAtivos ? ` · ${filtrosAtivos}` : ""}
                   </button>
                 )}

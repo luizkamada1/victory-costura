@@ -11,12 +11,12 @@ export function pct(ef: number | null) {
   return ef === null ? "—" : `${(ef * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }
 
-export function BarraEficiencia({ ef }: { ef: number | null }) {
+export function BarraEficiencia({ ef, rotulo = "Eficiência" }: { ef: number | null; rotulo?: string }) {
   const cor = corEficiencia(ef);
   const largura = ef === null ? 0 : Math.min(ef / ESCALA, 1) * 100;
   return (
     <div className="eficiencia">
-      <div className="barra" role="img" aria-label={`Eficiência ${pct(ef)}`}>
+      <div className="barra" role="img" aria-label={`${rotulo} ${pct(ef)}`}>
         <div className="barra-preenchida" style={{ width: `${largura}%`, backgroundColor: cor }} />
         <div className="barra-meta" style={{ left: POS_META }} title="100%" />
       </div>
