@@ -14,7 +14,7 @@ export type BarraCostureira = {
 
 export type Ordem = "eficiencia" | "produtividade";
 
-const ALTURA_UTIL = 200;
+const ALTURA_UTIL = 130;
 const M = { topo: 24, direita: 48, esquerda: 44 };
 const LARGURA_MIN = 46; // espaço mínimo de cada costureira; abaixo disso o gráfico rola na horizontal
 
@@ -47,7 +47,7 @@ export default function GraficoCostureiras({
   if (barras.length === 0) {
     return (
       <div ref={caixa} className="grafico">
-        <div className="vazio" style={{ height: 180, display: "grid", placeContent: "center" }}>
+        <div className="vazio" style={{ height: 140, display: "grid", placeContent: "center" }}>
           <strong>Nenhuma costureira com jornada neste período</strong>
           As barras aparecem quando houver jornada no período.
         </div>

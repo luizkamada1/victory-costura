@@ -338,83 +338,72 @@ export default function DashboardPage() {
       </div>
 
       {resumoAberto && (
-        <>
-          <div className="eficiencia-topo">
-            <section className="bloco cartao-eficiencia" aria-busy={carregando}>
-              <h2>Indicadores do período</h2>
-              <p className="bloco-descricao">
-                {formatarData(inicio)} a {formatarData(fim)}
-                {tabela.filtrando ? " · costureiras filtradas" : ""}
-              </p>
-              <div className="indicadores" style={{ opacity: carregando ? 0.5 : 1 }}>
-                <Indicador rotulo="Eficiência" dica={DICA_EFICIENCIA} valor={efPeriodo} classe="legenda-ef" />
-                <Indicador rotulo="Produtividade" dica={DICA_PRODUTIVIDADE} valor={prodPeriodo} classe="legenda-prod" />
+        <div className="resumo-dashboard">
+          {/* indicadores numa faixa só, e os dois gráficos lado a lado: o dashboard cabe sem rolar tanto */}
+          <div className="kpis" style={{ opacity: carregando ? 0.5 : 1 }} aria-busy={carregando}>
+            <section className="bloco kpi">
+              <Indicador rotulo="Eficiência" dica={DICA_EFICIENCIA} valor={efPeriodo} classe="legenda-ef" />
+            </section>
+            <section className="bloco kpi">
+              <Indicador rotulo="Produtividade" dica={DICA_PRODUTIVIDADE} valor={prodPeriodo} classe="legenda-prod" />
+            </section>
+            <section className="bloco kpi">
+              <div className="indicador">
+                <span className="indicador-rotulo">Peças produzidas</span>
+                <div className="numero-heroi num">{(pecas?.total ?? 0).toLocaleString("pt-BR")}</div>
+                <span className="kpi-nota">equipe toda</span>
               </div>
             </section>
-
-            <section className="bloco" aria-busy={carregando}>
-              <div className="bloco-cabecalho" style={{ alignItems: "flex-start", marginBottom: 10 }}>
-                <div>
-                  <h2>Por dia</h2>
-                  <p className="bloco-descricao">
-                    Dias com produção entre {formatarData(inicio)} e {formatarData(fim)}
-                    {escolhida ? ` · ${escolhida.nome}` : tabela.filtrando ? ", costureiras filtradas" : ""}.
-                  </p>
+            <section className="bloco kpi">
+              <div className="indicador">
+                <span className="indicador-rotulo">Média de peças por dia</span>
+                <div className="numero-heroi num">
+                  {pecas?.porDia.length ? Math.round(pecas.total / pecas.porDia.length).toLocaleString("pt-BR") : "—"}
                 </div>
-                <label className="campo campo-grafico">
-                  <span>Costureira</span>
-                  <select
-                    className="entrada"
-                    value={escolhida ? String(escolhida.id) : ""}
-                    onChange={(e) => setCostureiraGrafico(e.target.value ? Number(e.target.value) : null)}
-                  >
-                    <option value="">{tabela.filtrando ? "Costureiras filtradas" : "Toda a equipe"}</option>
-                    {[...linhas]
-                      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
-                      .map((l) => (
-                        <option key={l.id} value={l.id}>
-                          {l.nome}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              </div>
-              <div className="legenda" style={{ marginBottom: 8 }}>
-                <span>
-                  <i className="legenda-ef" /> Eficiência
-                </span>
-                <span>
-                  <i className="legenda-linha-prod" /> Produtividade
+                <span className="kpi-nota">
+                  {pecas?.porDia.length ? `em ${pecas.porDia.length} ${pecas.porDia.length === 1 ? "dia" : "dias"}` : ""}
                 </span>
               </div>
-              <GraficoEficiencia pontos={pontosGrafico} carregando={carregando} nome={escolhida?.nome} />
             </section>
           </div>
 
-          <div className="eficiencia-topo">
-            <section className="bloco cartao-eficiencia" aria-busy={carregando}>
-              <h2>Peças produzidas</h2>
-              <p className="bloco-descricao">
-                {formatarData(inicio)} a {formatarData(fim)} · equipe toda
-              </p>
-              <div className="indicadores" style={{ opacity: carregando ? 0.5 : 1 }}>
-                <div className="indicador">
-                  <span className="indicador-rotulo">No período</span>
-                  <div className="numero-heroi num">{(pecas?.total ?? 0).toLocaleString("pt-BR")}</div>
-                </div>
-                <div className="indicador">
-                  <span className="indicador-rotulo">Média por dia produzido</span>
-                  <div className="numero-medio num">
-                    {pecas?.porDia.length
-                      ? Math.round(pecas.total / pecas.porDia.length).toLocaleString("pt-BR")
-                      : "—"}
+          <div className="graficos-dupla">
+            <section className="bloco" aria-busy={carregando}>
+              <div className="bloco-cabecalho" style={{ alignItems: "flex-start" }}>
+                <div>
+                  <h2>Eficiência por dia</h2>
+                  <div className="legenda" style={{ marginTop: 4 }}>
+                    <span>
+                      <i className="legenda-ef" /> Eficiência
+                    </span>
+                    <span>
+                      <i className="legenda-linha-prod" /> Produtividade
+                    </span>
                   </div>
                 </div>
+                <select
+                  className="entrada entrada-pequena"
+                  aria-label="Costureira do gráfico"
+                  value={escolhida ? String(escolhida.id) : ""}
+                  onChange={(e) => setCostureiraGrafico(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">{tabela.filtrando ? "Costureiras filtradas" : "Toda a equipe"}</option>
+                  {[...linhas]
+                    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.nome}
+                      </option>
+                    ))}
+                </select>
               </div>
+              <GraficoEficiencia pontos={pontosGrafico} carregando={carregando} nome={escolhida?.nome} />
             </section>
 
             <section className="bloco" aria-busy={carregando}>
-              <h2 style={{ marginBottom: 12 }}>Peças por dia</h2>
+              <div className="bloco-cabecalho">
+                <h2>Peças por dia</h2>
+              </div>
               <GraficoPecas dias={pecas?.porDia ?? []} carregando={carregando} />
             </section>
           </div>
@@ -454,7 +443,7 @@ export default function DashboardPage() {
             </div>
             <GraficoCostureiras barras={visiveis.filter((l) => l.previsto > 0)} ordem={ordemBarras} carregando={carregando} />
           </section>
-        </>
+        </div>
       )}
 
       <section className="bloco" aria-busy={carregando}>

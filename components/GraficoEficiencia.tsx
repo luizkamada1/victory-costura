@@ -7,7 +7,7 @@ import { pct } from "@/components/Medidas";
 // previsto: base da produtividade (sem descontar ausências); quando vem, o gráfico desenha as duas linhas
 export type PontoEficiencia = { data: string; produzido: number; disponivel: number; previsto?: number };
 
-const ALTURA = 240;
+const ALTURA = 180;
 const M = { topo: 18, direita: 56, baixo: 30, esquerda: 44 };
 
 const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;

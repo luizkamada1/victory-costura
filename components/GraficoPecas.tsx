@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { DIAS_SEMANA, diaSemana } from "@/lib/producao";
 import type { PecasDia } from "@/lib/pecas";
 
-const ALTURA_UTIL = 190;
+const ALTURA_UTIL = 132;
 const M = { topo: 22, direita: 56, baixo: 28, esquerda: 44 };
 const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const n = (v: number) => v.toLocaleString("pt-BR");
