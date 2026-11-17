@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { buscarTodos, respostaErro } from "@/lib/producao-api";
-import { Costureira, Jornada, dataBrasilia, diasEntre, minutosJornada } from "@/lib/producao";
+import { Costureira, Jornada, dataBrasilia, diasEntre, minutosJornada, tipoDaOcorrencia } from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +22,8 @@ type Dia = {
 // Eficiência = minutos produzidos (soma de quantidade × tempo de cada operação apontada)
 //            ÷ minutos disponíveis (jornada do dia ± ocorrências)
 // Produtividade = minutos produzidos ÷ minutos previstos, que não descontam as ausências dela
-//            (ocorrências individuais negativas, como faltas). Ocorrências da fábrica toda
-//            (falta de luz, sem expediente) e horas extras contam nas duas.
+//            (ocorrências do tipo "Falta ou saída"). Paradas (falta de luz, máquina, reunião,
+//            sem expediente) e horas extras contam nas duas.
 //
 // A jornada só conta nos dias em que a costureira estava no sistema: a partir do primeiro
 // apontamento da fábrica (antes disso o sistema não era usado) ou do cadastro dela, o que for
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     const [costureirasResp, jornadaResp, ocorrenciasResp, producao, primeiroResp, ultimoResp] = await Promise.all([
       supabase.from("costureiras").select("id, nome, setor, jornada, ativa, created_at").order("nome"),
       supabase.from("jornada_padrao").select("dia_semana, minutos"),
-      supabase.from("ocorrencias").select("costureira_id, data, minutos").gte("data", inicio).lte("data", fim),
+      supabase.from("ocorrencias").select("costureira_id, data, minutos, tipo").gte("data", inicio).lte("data", fim),
       buscarTodos((de, ate) =>
         supabase
           .from("ticket_operacoes")
@@ -69,7 +69,13 @@ export async function GET(req: NextRequest) {
     ]);
     if (costureirasResp.error) throw costureirasResp.error;
     if (jornadaResp.error) throw jornadaResp.error;
-    if (ocorrenciasResp.error) throw ocorrenciasResp.error;
+    // banco ainda sem a coluna "tipo": busca sem ela (o tipo é deduzido)
+    let ocorrenciasLidas = ocorrenciasResp.data as { costureira_id: number | null; data: string; minutos: number; tipo?: string | null }[] | null;
+    if (ocorrenciasResp.error?.code === "42703") {
+      const r = await supabase.from("ocorrencias").select("costureira_id, data, minutos").gte("data", inicio).lte("data", fim);
+      if (r.error) throw r.error;
+      ocorrenciasLidas = r.data;
+    } else if (ocorrenciasResp.error) throw ocorrenciasResp.error;
     if (primeiroResp.error) throw primeiroResp.error;
     if (ultimoResp.error) throw ultimoResp.error;
 
@@ -88,16 +94,16 @@ export async function GET(req: NextRequest) {
     for (const row of jornadaResp.data ?? []) padrao[String(row.dia_semana)] = row.minutos;
 
     const chave = (costureiraId: number | null, data: string) => `${costureiraId ?? "todas"}|${data}`;
-    // individuais separadas em ausências (negativas) e acréscimos (positivas)
-    const ocorrencias = new Map<string, { mais: number; menos: number }>();
-    for (const o of ocorrenciasResp.data ?? []) {
+    // separadas em ausências (só tiram da eficiência) e o resto (paradas e horas extras, contam nas duas)
+    const ocorrencias = new Map<string, { ausencia: number; outras: number }>();
+    for (const o of ocorrenciasLidas ?? []) {
       const k = chave(o.costureira_id, o.data);
-      const atual = ocorrencias.get(k) ?? { mais: 0, menos: 0 };
-      if (o.minutos >= 0) atual.mais += o.minutos;
-      else atual.menos += o.minutos;
+      const atual = ocorrencias.get(k) ?? { ausencia: 0, outras: 0 };
+      if (tipoDaOcorrencia(o as Parameters<typeof tipoDaOcorrencia>[0]) === "ausencia") atual.ausencia += o.minutos;
+      else atual.outras += o.minutos;
       ocorrencias.set(k, atual);
     }
-    const soma = (o?: { mais: number; menos: number }) => (o ? o.mais + o.menos : 0);
+    const soma = (o?: { ausencia: number; outras: number }) => (o ? o.ausencia + o.outras : 0);
 
     const produzido = new Map<string, { minutos: number; operacoes: number; pecas: number }>();
     for (const p of producao) {
@@ -125,7 +131,7 @@ export async function GET(req: NextRequest) {
           const dela = conta ? ocorrencias.get(chave(c.id, data)) : undefined;
           const geral = conta ? soma(ocorrencias.get(chave(null, data))) : 0;
           const ocorr = soma(dela) + geral;
-          const previsto = Math.max(0, jornada + geral + (dela?.mais ?? 0));
+          const previsto = Math.max(0, jornada + geral + (dela?.outras ?? 0));
           const disponivel = Math.max(0, jornada + ocorr);
           const prod = produzido.get(chave(c.id, data));
           return {

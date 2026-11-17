@@ -123,3 +123,7 @@ alter table itens add column if not exists colecao text;
 -- Horários de trabalho da jornada padrão, por dia: [["07:30","09:30"],["09:45","12:00"],...]
 -- Os minutos do dia são calculados a partir deles.
 alter table jornada_padrao add column if not exists horarios jsonb;
+
+-- Tipo da ocorrência: 'ausencia' (falta ou saída: baixa a produtividade), 'parada' (falta de luz,
+-- máquina, reunião: não afeta a produtividade) ou 'extra' (hora extra). Null = deduzido como antes.
+alter table ocorrencias add column if not exists tipo text;

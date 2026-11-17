@@ -92,13 +92,30 @@ export type Ticket = {
   operacoes: TicketOperacao[];
 };
 
+export type TipoOcorrencia = "ausencia" | "parada" | "extra";
+
 export type Ocorrencia = {
   id: number;
   costureira_id: number | null;
   data: string;
   minutos: number;
   descricao: string | null;
+  tipo?: TipoOcorrencia | null; // ausente/nulo nas ocorrências antigas
 };
+
+export const TIPOS_OCORRENCIA: Record<TipoOcorrencia, { nome: string; dica: string }> = {
+  ausencia: { nome: "Falta ou saída", dica: "A costureira se ausentou. Conta como ausência e baixa a produtividade." },
+  parada: { nome: "Parada", dica: "Falta de luz, máquina quebrada, reunião, sem expediente. Não afeta a produtividade." },
+  extra: { nome: "Hora extra", dica: "Tempo trabalhado além da jornada." },
+};
+
+// Ocorrências antigas não têm tipo: deduz pela regra de antes
+// (somar = hora extra; tirar de uma costureira = ausência; tirar da fábrica toda = parada)
+export function tipoDaOcorrencia(o: Pick<Ocorrencia, "minutos" | "costureira_id" | "tipo">): TipoOcorrencia {
+  if (o.tipo === "ausencia" || o.tipo === "parada" || o.tipo === "extra") return o.tipo;
+  if (o.minutos > 0) return "extra";
+  return o.costureira_id ? "ausencia" : "parada";
+}
 
 // O código de barras impresso é o id do cupom com 8 dígitos
 export function codigoBarras(ticketOperacaoId: number) {
@@ -202,5 +219,19 @@ export function minutosDosPeriodos(periodos: Periodo[]): number {
     const a = minutosDoHorario(ini);
     const b = minutosDoHorario(fim);
     return a !== null && b !== null && b > a ? s + (b - a) : s;
+  }, 0);
+}
+
+// Minutos de [início, fim] que caem dentro dos períodos de trabalho (os intervalos ficam de fora).
+// Ex: 10:00 às 15:00 numa segunda (07:30–09:30, 09:45–12:00, 13:00–15:30, 15:45–17:30) = 120 + 120 = 240
+export function minutosDentroDosPeriodos(inicio: string, fim: string, periodos: Periodo[]): number {
+  const a = minutosDoHorario(inicio);
+  const b = minutosDoHorario(fim);
+  if (a === null || b === null || b <= a) return 0;
+  return periodos.reduce((s, [pi, pf]) => {
+    const x = minutosDoHorario(pi);
+    const y = minutosDoHorario(pf);
+    if (x === null || y === null) return s;
+    return s + Math.max(0, Math.min(b, y) - Math.max(a, x));
   }, 0);
 }

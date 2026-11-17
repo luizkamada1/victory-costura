@@ -11,10 +11,14 @@ import {
   HorariosSemana,
   Jornada,
   Ocorrencia,
+  TIPOS_OCORRENCIA,
+  TipoOcorrencia,
   diaSemana,
   formatarData,
   formatarMinutos,
   hojeISO,
+  minutosDentroDosPeriodos,
+  minutosDoHorario,
   minutosDosPeriodos,
   minutosJornada,
   problemaHorarios,
@@ -24,7 +28,10 @@ type FormOcorrencia = {
   data: string;
   costureiras: number[]; // vazio = fábrica toda
   diaInteiro: boolean; // minutos = a jornada do dia de cada costureira
-  sentido: "reduzir" | "aumentar";
+  modo: "horario" | "minutos"; // informa das/às (o sistema calcula) ou os minutos direto
+  inicio: string;
+  fim: string;
+  tipo: TipoOcorrencia;
   minutos: string;
   descricao: string;
 };
@@ -38,7 +45,10 @@ export default function JornadaPage() {
     data: hojeISO(),
     costureiras: [],
     diaInteiro: false,
-    sentido: "reduzir",
+    modo: "horario",
+    inicio: "",
+    fim: "",
+    tipo: "parada",
     minutos: "",
     descricao: "",
   });
@@ -48,6 +58,8 @@ export default function JornadaPage() {
   const [jornadaAberta, setJornadaAberta] = useState(false);
   // horários sendo editados; os minutos salvos (jornada) só mudam ao salvar
   const [horarios, setHorarios] = useState<HorariosSemana>({});
+  // horários já salvos de cada dia (null = dia ainda sem horários); usados no cálculo das ocorrências
+  const [horariosSalvos, setHorariosSalvos] = useState<Record<string, HorariosSemana[string] | null>>({});
   const [semHorarios, setSemHorarios] = useState<Record<string, boolean>>({});
   const [copiado, setCopiado] = useState<string | null>(null);
 
@@ -68,6 +80,7 @@ export default function JornadaPage() {
           sem[String(d)] = !salvos && (j.jornada[String(d)] ?? 0) > 0;
         }
         setHorarios(h);
+        setHorariosSalvos(j.horarios ?? {});
         setSemHorarios(sem);
         setCostureiras(c.costureiras);
       } catch (e) {
@@ -112,6 +125,7 @@ export default function JornadaPage() {
       const novos: Jornada = {};
       for (let d = 0; d < 7; d++) novos[String(d)] = minutosDosPeriodos(horarios[String(d)] ?? []);
       setJornada(novos);
+      setHorariosSalvos(Object.fromEntries(Object.entries(horarios).map(([d, p]) => [d, p.map((x) => [x[0], x[1]])])));
       setSemHorarios({});
       setCopiado(null);
       setSucesso("Jornada padrão salva. Vale para todas as costureiras sem jornada própria.");
@@ -130,11 +144,49 @@ export default function JornadaPage() {
   const jornadaDoDia = Math.max(...jornadasDoDia);
   const jornadaVaria = new Set(jornadasDoDia).size > 1;
 
+  // Ocorrência por horário: tirar conta só o que cai dentro do expediente (intervalos ficam de fora);
+  // somar (hora extra) conta só o que fica fora do expediente
+  const periodosDoDia = form.data ? horariosSalvos[String(diaSemana(form.data))] ?? null : null;
+  const ini = minutosDoHorario(form.inicio);
+  const fimMin = minutosDoHorario(form.fim);
+  const intervaloValido = ini !== null && fimMin !== null && fimMin > ini;
+  const total = intervaloValido ? fimMin! - ini! : 0;
+  const dentro = intervaloValido ? (periodosDoDia ? minutosDentroDosPeriodos(form.inicio, form.fim, periodosDoDia) : total) : 0;
+  const reduz = form.tipo !== "extra";
+  const minutosDoHorarioInformado = reduz ? dentro : total - (periodosDoDia ? dentro : 0);
+  const foraDoCalculo = total - minutosDoHorarioInformado;
+
   async function salvarOcorrencia(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
-    const sinal = form.sentido === "reduzir" ? -1 : 1;
-    const minutos = Math.abs(form.diaInteiro ? jornadaDoDia : Number(form.minutos)) * sinal;
+    if (form.tipo === "ausencia" && form.costureiras.length === 0) {
+      setErro("Falta ou saída é de uma costureira: escolha quem faltou no campo Costureiras.");
+      return;
+    }
+    const sinal = reduz ? -1 : 1;
+    if (!form.diaInteiro && form.modo === "horario") {
+      if (!intervaloValido) {
+        setErro("Informe o horário de início e de fim (o fim depois do início).");
+        return;
+      }
+      if (minutosDoHorarioInformado <= 0) {
+        setErro(
+          reduz
+            ? "Esse horário cai todo fora do expediente; não há minutos para tirar."
+            : "Esse horário cai todo dentro do expediente; não há minutos extras para somar."
+        );
+        return;
+      }
+    }
+    const minutosInformados = form.diaInteiro
+      ? jornadaDoDia
+      : form.modo === "horario"
+        ? minutosDoHorarioInformado
+        : Number(form.minutos);
+    const minutos = Math.abs(minutosInformados) * sinal;
+    // o horário fica anotado no motivo
+    const faixa = !form.diaInteiro && form.modo === "horario" ? `${form.inicio} às ${form.fim}` : "";
+    const descricao = faixa ? (form.descricao.trim() ? `${form.descricao.trim()} (${faixa})` : `Das ${faixa}`) : form.descricao;
     // "dia inteiro": cada costureira perde a jornada dela naquele dia
     if (form.diaInteiro && escolhidas.some((c) => jornadaDe(c) === 0)) {
       const sem = escolhidas.filter((c) => jornadaDe(c) === 0).map((c) => c.nome);
@@ -150,12 +202,13 @@ export default function JornadaPage() {
         body: JSON.stringify({
           data: form.data,
           costureira_ids: form.costureiras,
+          tipo: form.tipo,
           minutos,
           minutos_por_costureira: minutosPorCostureira,
-          descricao: form.descricao,
+          descricao,
         }),
       });
-      setForm({ ...form, minutos: "", descricao: "", diaInteiro: false, costureiras: [] });
+      setForm({ ...form, minutos: "", inicio: "", fim: "", descricao: "", diaInteiro: false, costureiras: [] });
       setSucesso(r.criadas > 1 ? `${r.criadas} ocorrências registradas, uma para cada costureira.` : "Ocorrência registrada.");
       setTimeout(() => setSucesso(null), 4000);
       if (form.data.slice(0, 7) !== mes) setMes(form.data.slice(0, 7));
@@ -191,6 +244,7 @@ export default function JornadaPage() {
     [
       { id: "data", titulo: "Dia", valor: (o) => o.data, texto: (o) => `${formatarData(o.data)} ${DIAS_SEMANA[diaSemana(o.data)]}` },
       { id: "costureira", titulo: "Costureira", valor: (o) => nomeCostureira(o.costureira_id) },
+      { id: "tipo", titulo: "Tipo", valor: (o) => (o.tipo ? TIPOS_OCORRENCIA[o.tipo].nome : "") },
       { id: "minutos", titulo: "Minutos", alinhar: "right", valor: (o) => o.minutos },
       { id: "descricao", titulo: "Motivo", valor: (o) => o.descricao },
       { id: "acoes", titulo: "", alinhar: "right", ordenavel: false, filtravel: false },
@@ -336,31 +390,113 @@ export default function JornadaPage() {
             <SeletorCostureiras
               costureiras={costureiras.filter((c) => c.ativa)}
               marcadas={form.costureiras}
-              onMudar={(ids) => setForm((f) => ({ ...f, costureiras: ids }))}
+              onMudar={(ids) =>
+                setForm((f) => ({
+                  ...f,
+                  costureiras: ids,
+                  // sugestão: costureira marcada costuma ser falta; fábrica toda, parada (dá para trocar)
+                  tipo:
+                    f.costureiras.length === 0 && ids.length > 0 && f.tipo === "parada"
+                      ? "ausencia"
+                      : ids.length === 0 && f.tipo === "ausencia"
+                        ? "parada"
+                        : f.tipo,
+                }))
+              }
             />
           </div>
-          <label className="campo">
-            <span>Efeito</span>
-            <select
-              className="entrada"
-              value={form.sentido}
-              onChange={(e) => setForm({ ...form, sentido: e.target.value as FormOcorrencia["sentido"] })}
-            >
-              <option value="reduzir">Tira minutos</option>
-              <option value="aumentar">Soma minutos</option>
-            </select>
-          </label>
-          <label className="campo">
-            <span>Minutos</span>
-            <input
-              type="number"
-              min={1}
-              className="entrada num"
-              value={form.diaInteiro ? (jornadaVaria ? "" : String(jornadaDoDia)) : form.minutos}
-              placeholder={form.diaInteiro && jornadaVaria ? "jornada de cada uma" : undefined}
-              onChange={(e) => setForm({ ...form, minutos: e.target.value, diaInteiro: false })}
-            />
+          <div className="campo campo-tipo">
+            <span id="rotulo-tipo">Tipo</span>
+            <div className="periodo-fichas tipo-fichas" role="radiogroup" aria-labelledby="rotulo-tipo">
+              {(Object.keys(TIPOS_OCORRENCIA) as TipoOcorrencia[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="radio"
+                  aria-checked={form.tipo === t}
+                  className="ficha"
+                  aria-pressed={form.tipo === t}
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      tipo: t,
+                      // hora extra não tem "dia inteiro"
+                      diaInteiro: t === "extra" ? false : form.diaInteiro,
+                      descricao:
+                        form.diaInteiro && (form.descricao === "Falta" || form.descricao === "Sem expediente")
+                          ? t === "ausencia"
+                            ? "Falta"
+                            : "Sem expediente"
+                          : form.descricao,
+                    })
+                  }
+                >
+                  {TIPOS_OCORRENCIA[t].nome}
+                </button>
+              ))}
+            </div>
+            <small className={form.tipo === "ausencia" && form.costureiras.length === 0 ? "aviso-horario" : undefined}>
+              {form.tipo === "ausencia" && form.costureiras.length === 0
+                ? "Escolha quem faltou no campo Costureiras."
+                : TIPOS_OCORRENCIA[form.tipo].dica}
+            </small>
+          </div>
+          <div className="campo">
+            <span>{form.diaInteiro ? "Dia inteiro" : form.modo === "horario" ? "Horário" : "Minutos"}</span>
+            {form.diaInteiro ? (
+              <div className="entrada entrada-fixa num">
+                {jornadaVaria ? "A jornada de cada uma" : `${jornadaDoDia} min (${formatarMinutos(jornadaDoDia)})`}
+              </div>
+            ) : form.modo === "horario" ? (
+              <div className="faixa-horario">
+                <input
+                  type="time"
+                  className="entrada num"
+                  aria-label="Início"
+                  value={form.inicio}
+                  onChange={(e) => setForm({ ...form, inicio: e.target.value })}
+                />
+                <span className="fraco">às</span>
+                <input
+                  type="time"
+                  className="entrada num"
+                  aria-label="Fim"
+                  value={form.fim}
+                  onChange={(e) => setForm({ ...form, fim: e.target.value })}
+                />
+              </div>
+            ) : (
+              <input
+                type="number"
+                min={1}
+                className="entrada num"
+                value={form.minutos}
+                onChange={(e) => setForm({ ...form, minutos: e.target.value })}
+              />
+            )}
             <small>
+              {!form.diaInteiro && form.modo === "horario" && intervaloValido && (
+                <span className="calculo-horario">
+                  <strong className="num">
+                    {reduz ? "−" : "+"}
+                    {minutosDoHorarioInformado} min
+                  </strong>
+                  {periodosDoDia && foraDoCalculo > 0 && (
+                    <span className="num">
+                      {reduz
+                        ? ` · sem os ${foraDoCalculo} min de intervalo`
+                        : ` · sem os ${foraDoCalculo} min do expediente normal`}
+                    </span>
+                  )}
+                  <br />
+                </span>
+              )}
+              {!form.diaInteiro && form.modo === "horario" && form.data && !periodosDoDia && (
+                <span className="aviso-horario">
+                  Este dia ainda não tem horários na jornada padrão; conta o intervalo inteiro.
+                  <br />
+                </span>
+              )}
               {jornadaVaria ? (
                 <>A jornada do dia varia entre elas</>
               ) : (
@@ -368,28 +504,38 @@ export default function JornadaPage() {
                   Jornada do dia: <span className="num">{jornadaDoDia}</span> min
                 </>
               )}
-              {jornadaDoDia > 0 && (
+              {" · "}
+              {form.diaInteiro || form.modo === "minutos" ? (
+                <button type="button" className="link" onClick={() => setForm({ ...form, diaInteiro: false, modo: "horario" })}>
+                  informar horário
+                </button>
+              ) : (
                 <>
-                  {" · "}
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        sentido: "reduzir",
-                        minutos: String(jornadaDoDia),
-                        diaInteiro: true,
-                        descricao: form.descricao || (form.costureiras.length ? "Falta" : "Sem expediente"),
-                      })
-                    }
-                  >
-                    dia inteiro
+                  {jornadaDoDia > 0 && reduz && (
+                    <>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            diaInteiro: true,
+                            descricao: form.descricao || (form.tipo === "ausencia" ? "Falta" : "Sem expediente"),
+                          })
+                        }
+                      >
+                        dia inteiro
+                      </button>
+                      {" · "}
+                    </>
+                  )}
+                  <button type="button" className="link" onClick={() => setForm({ ...form, modo: "minutos" })}>
+                    informar minutos
                   </button>
                 </>
               )}
             </small>
-          </label>
+          </div>
           <label className="campo motivo">
             <span>Motivo</span>
             <input
@@ -436,6 +582,13 @@ export default function JornadaPage() {
                       {formatarData(o.data)} <span className="fraco">{DIAS_SEMANA[diaSemana(o.data)].slice(0, 3)}</span>
                     </td>
                     <td className={o.costureira_id ? "forte" : "fraco"}>{nomeCostureira(o.costureira_id)}</td>
+                    <td>
+                      {o.tipo && (
+                        <span className={`selo selo-tipo-${o.tipo}`} title={TIPOS_OCORRENCIA[o.tipo].dica}>
+                          {TIPOS_OCORRENCIA[o.tipo].nome}
+                        </span>
+                      )}
+                    </td>
                     <td className="direita forte" style={{ color: o.minutos < 0 ? "var(--erro)" : "var(--ok)" }}>
                       {o.minutos > 0 ? `+${o.minutos}` : o.minutos}
                     </td>

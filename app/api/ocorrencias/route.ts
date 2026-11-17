@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { respostaErro } from "@/lib/producao-api";
+import { TipoOcorrencia, tipoDaOcorrencia } from "@/lib/producao";
+
+const SQL_TIPO = "alter table ocorrencias add column if not exists tipo text;";
+const semColuna = (e: { code?: string } | null) => e?.code === "42703" || e?.code === "PGRST204";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,16 +15,20 @@ export async function GET(req: NextRequest) {
     const inicio = req.nextUrl.searchParams.get("inicio");
     const fim = req.nextUrl.searchParams.get("fim");
     const supabase = getSupabaseServer();
-    let consulta = supabase
-      .from("ocorrencias")
-      .select("id, costureira_id, data, minutos, descricao")
-      .order("data", { ascending: false })
-      .limit(500);
-    if (inicio) consulta = consulta.gte("data", inicio);
-    if (fim) consulta = consulta.lte("data", fim);
-    const { data, error } = await consulta;
-    if (error) throw error;
-    return NextResponse.json({ ocorrencias: data ?? [] });
+    const buscar = (campos: string) => {
+      let consulta = supabase.from("ocorrencias").select(campos).order("data", { ascending: false }).limit(500);
+      if (inicio) consulta = consulta.gte("data", inicio);
+      if (fim) consulta = consulta.lte("data", fim);
+      return consulta;
+    };
+    let resp = await buscar("id, costureira_id, data, minutos, descricao, tipo");
+    if (semColuna(resp.error)) resp = await buscar("id, costureira_id, data, minutos, descricao");
+    if (resp.error) throw resp.error;
+    // as antigas, sem tipo, recebem o tipo deduzido
+    const ocorrencias = ((resp.data ?? []) as unknown as { minutos: number; costureira_id: number | null; tipo?: string | null }[]).map(
+      (o) => ({ ...o, tipo: tipoDaOcorrencia(o as Parameters<typeof tipoDaOcorrencia>[0]) })
+    );
+    return NextResponse.json({ ocorrencias });
   } catch (err) {
     return respostaErro(err);
   }
@@ -45,13 +53,35 @@ export async function POST(req: NextRequest) {
     const minutosDe = (id: number | null) =>
       Math.round(Number(id !== null && porCostureira[String(id)] !== undefined ? porCostureira[String(id)] : body.minutos));
 
-    const linhas = (ids.length ? ids : [null]).map((id) => ({ costureira_id: id, data, minutos: minutosDe(id), descricao }));
+    const tipoPedido = String(body.tipo ?? "");
+    const tipo: TipoOcorrencia | null =
+      tipoPedido === "ausencia" || tipoPedido === "parada" || tipoPedido === "extra" ? tipoPedido : null;
+    if (tipo === "ausencia" && !ids.length) {
+      return respostaErro(new Error("Falta ou saída é de uma costureira: escolha quem faltou."), 400);
+    }
+    // o sinal vem do tipo: hora extra soma, falta e parada tiram
+    const sinal = (m: number) => (tipo ? (tipo === "extra" ? Math.abs(m) : -Math.abs(m)) : m);
+    const linhas = (ids.length ? ids : [null]).map((id) => ({
+      costureira_id: id,
+      data,
+      minutos: sinal(minutosDe(id)),
+      descricao,
+      ...(tipo ? { tipo } : {}),
+    }));
     if (linhas.some((l) => !l.minutos)) {
       return respostaErro(new Error("Informe os minutos (positivo aumenta, negativo reduz)"), 400);
     }
 
     const supabase = getSupabaseServer();
-    const { error } = await supabase.from("ocorrencias").insert(linhas);
+    let { error } = await supabase.from("ocorrencias").insert(linhas);
+    if (semColuna(error)) {
+      // banco ainda sem a coluna "tipo": grava sem ela se o tipo for o que a regra antiga deduz
+      const bate = linhas.every((l) => !tipo || tipoDaOcorrencia({ ...l, tipo: null }) === tipo);
+      if (!bate) {
+        return respostaErro(new Error(`Para registrar esse tipo, falta preparar o banco. Rode no Supabase (SQL Editor): ${SQL_TIPO}`), 400);
+      }
+      ({ error } = await supabase.from("ocorrencias").insert(linhas.map(({ costureira_id, data, minutos, descricao }) => ({ costureira_id, data, minutos, descricao }))));
+    }
     if (error) throw error;
     return NextResponse.json({ ok: true, criadas: linhas.length });
   } catch (err) {

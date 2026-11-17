@@ -1120,7 +1120,7 @@ input[type="checkbox"] {
 }
 
 .grade-ocorrencia {
-  grid-template-columns: 1fr 1.4fr 1fr 1fr;
+  grid-template-columns: 0.8fr 1.2fr 1.5fr 1.3fr;
   align-items: start;
 }
 
@@ -2163,5 +2163,67 @@ input[type="number"]::-webkit-inner-spin-button {
   .horario-copiar {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+}
+
+/* ocorrência por horário: das ... às ... */
+.faixa-horario {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.faixa-horario .entrada {
+  flex: 1;
+  min-width: 0;
+}
+
+.entrada-fixa {
+  display: flex;
+  align-items: center;
+  background: var(--rosa-fundo);
+  color: var(--tinta);
+}
+
+.calculo-horario strong {
+  color: var(--tinta);
+}
+
+.aviso-horario {
+  color: var(--alerta);
+}
+
+/* ocorrência: tipo (falta, parada, hora extra) */
+.tipo-fichas {
+  display: flex;
+  width: 100%;
+}
+
+.tipo-fichas .ficha {
+  flex: 1;
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+
+.selo-tipo-ausencia {
+  background: #fde8e6;
+  color: var(--erro);
+}
+
+.selo-tipo-parada {
+  background: var(--superficie-2);
+  color: var(--tinta-3);
+}
+
+.selo-tipo-extra {
+  background: #e3f3e8;
+  color: var(--ok);
+}
+
+/* telas médias: a ocorrência em duas colunas, para o horário caber */
+@media (max-width: 1200px) and (min-width: 761px) {
+  .grade-ocorrencia {
+    grid-template-columns: 1fr 1fr;
   }
 }
