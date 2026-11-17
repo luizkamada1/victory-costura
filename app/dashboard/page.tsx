@@ -9,6 +9,7 @@ import { useTabela } from "@/components/Tabela";
 import { TituloRecolhivel } from "@/components/Recolhivel";
 import GraficoCostureiras, { Ordem } from "@/components/GraficoCostureiras";
 import GraficoPecas from "@/components/GraficoPecas";
+import FilaMaquinas from "@/components/FilaMaquinas";
 import type { ResumoPecas } from "@/lib/pecas";
 import { DIAS_SEMANA, corEficiencia, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
 
@@ -412,10 +413,6 @@ export default function DashboardPage() {
             <div className="bloco-cabecalho" style={{ alignItems: "flex-start", marginBottom: 10 }}>
               <div>
                 <h2>Comparativo por costureira</h2>
-                <p className="bloco-descricao">
-                  Entre {formatarData(inicio)} e {formatarData(fim)}
-                  {tabela.filtrando ? ", costureiras filtradas" : ""}.
-                </p>
               </div>
               <div className="ordem-grafico">
                 Ordenar por
@@ -445,6 +442,8 @@ export default function DashboardPage() {
           </section>
         </div>
       )}
+
+      <FilaMaquinas />
 
       <section className="bloco" aria-busy={carregando}>
         <div className="bloco-cabecalho">
