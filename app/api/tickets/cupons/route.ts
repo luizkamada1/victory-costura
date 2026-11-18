@@ -76,8 +76,10 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// body: { ticket_id, operacao_ids: [..] } → cria os cupons que o ticket ainda não tem e devolve
-// os ids de todos os cupons escolhidos (novos e já existentes), para imprimir.
+// body: { ticket_id, operacao_ids: [..], remover_outras? } → cria os cupons que o ticket ainda não tem e
+// devolve os ids de todos os cupons escolhidos (novos e já existentes), para imprimir.
+// remover_outras: tira do ticket os cupons das operações não escolhidas que ainda não foram apontados
+// (operações já feitas fora do sistema). Assim o ticket fica concluído quando as escolhidas forem apontadas.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -114,7 +116,18 @@ export async function POST(req: NextRequest) {
       criados = (data ?? []).map((c) => c.id);
     }
     const existentes = linhas.filter((o) => o.cupom_id).map((o) => o.cupom_id as number);
-    return NextResponse.json({ ok: true, cupons: [...existentes, ...criados], criados: criados.length });
+    const manter = [...existentes, ...criados];
+
+    let removidos = 0;
+    if (body.remover_outras) {
+      const supabase = getSupabaseServer();
+      let consulta = supabase.from("ticket_operacoes").delete().eq("ticket_id", ticketId).is("costureira_id", null);
+      if (manter.length) consulta = consulta.not("id", "in", `(${manter.join(",")})`);
+      const { data, error } = await consulta.select("id");
+      if (error) throw error;
+      removidos = data?.length ?? 0;
+    }
+    return NextResponse.json({ ok: true, cupons: manter, criados: criados.length, removidos });
   } catch (err) {
     return respostaErro(err);
   }

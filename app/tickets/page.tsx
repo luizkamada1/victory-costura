@@ -731,6 +731,7 @@ type OperacaoDoItem = {
   parte: Parte;
   ordem: number;
   cupom_id: number | null;
+  apontado: boolean;
 };
 type DadosCupons = {
   ticket: { id: number; op: string; referencia: string; cor: string | null; tamanho: string | null; quantidade: number };
@@ -746,6 +747,8 @@ function ModalCupons({ ticketId, onFechar, onImpresso }: { ticketId: number; onF
   const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  // operações já feitas fora do sistema: as não marcadas saem do ticket
+  const [concluirOutras, setConcluirOutras] = useState(false);
 
   useEffect(() => {
     janela.current?.showModal();
@@ -761,15 +764,28 @@ function ModalCupons({ ticketId, onFechar, onImpresso }: { ticketId: number; onF
     setMarcadas(n);
   }
 
+  // cupons que sairiam do ticket: não marcados, existentes e ainda não apontados
+  const sairao = (dados?.sequencia ?? []).filter((o) => !marcadas.has(o.operacao_id) && o.cupom_id && !o.apontado);
+
   async function imprimir() {
     if (!dados || !marcadas.size) return;
+    if (
+      concluirOutras &&
+      sairao.length > 0 &&
+      !confirm(
+        `${sairao.length} ${sairao.length === 1 ? "operação sai" : "operações saem"} do ticket #${dados.ticket.id} ` +
+          `(${sairao.map((o) => o.nome).join(", ")}).\n\nO ticket fica concluído quando as marcadas forem apontadas. ` +
+          "As que saem não contam na eficiência de ninguém. Continuar?"
+      )
+    )
+      return;
     setErro(null);
     setOcupado(true);
     const aba = window.open("", "_blank");
     try {
       const r = await api<{ cupons: number[] }>("/api/tickets/cupons", {
         method: "POST",
-        body: JSON.stringify({ ticket_id: dados.ticket.id, operacao_ids: Array.from(marcadas) }),
+        body: JSON.stringify({ ticket_id: dados.ticket.id, operacao_ids: Array.from(marcadas), remover_outras: concluirOutras }),
       });
       const url = `/tickets/imprimir?ids=${dados.ticket.id}&cupons=${r.cupons.join(",")}`;
       if (aba) aba.location.href = url;
@@ -832,10 +848,36 @@ function ModalCupons({ ticketId, onFechar, onImpresso }: { ticketId: number; onF
                       <span className="forte num">{o.ordem}ª</span>
                       <span className="modal-lista-nome">{o.nome}</span>
                       <span className="fraco">{o.maquina ?? "—"}</span>
+                      {o.apontado ? (
+                        <span className="selo selo-tipo-extra">apontada</span>
+                      ) : !o.cupom_id ? (
+                        <span className="selo">sem cupom</span>
+                      ) : null}
                     </label>
                   </li>
                 ))}
               </ul>
+            )}
+            {dados.sequencia.length > 0 && (
+              <label className="opcao-concluir" data-marcada={concluirOutras}>
+                <input type="checkbox" checked={concluirOutras} onChange={(e) => setConcluirOutras(e.target.checked)} />
+                <span>
+                  <strong>Dar as outras operações como feitas</strong>
+                  <span className="fraco">
+                    {" "}
+                    As não marcadas que ainda não foram apontadas saem do ticket, e ele fica concluído quando as marcadas
+                    forem apontadas.
+                    {concluirOutras && marcadas.size > 0 && (
+                      <>
+                        {" "}
+                        {sairao.length
+                          ? `Saem ${sairao.length}: ${sairao.map((o) => o.nome).join(", ")}.`
+                          : "Nenhuma operação sai."}
+                      </>
+                    )}
+                  </span>
+                </span>
+              </label>
             )}
           </>
         )}
