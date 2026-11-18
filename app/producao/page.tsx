@@ -10,10 +10,10 @@ import { Costureira, NOME_PARTE, PARTES, Ticket, dataBrasilia, formatarData, for
 // Em andamento sem apontamento há mais dias que isso ganha o alerta de parada
 const DIAS_ALERTA = 3;
 
-const COLUNAS: { id: Situacao; titulo: string; descricao: string }[] = [
-  { id: "aguardando", titulo: "Aguardando", descricao: "Tickets gerados, nenhum cupom apontado" },
-  { id: "andamento", titulo: "Em andamento", descricao: "Com cupons apontados, faltando outros" },
-  { id: "finalizado", titulo: "Finalizado", descricao: "Todos os cupons apontados" },
+const COLUNAS: { id: Situacao; titulo: string }[] = [
+  { id: "aguardando", titulo: "Aguardando" },
+  { id: "andamento", titulo: "Em andamento" },
+  { id: "finalizado", titulo: "Finalizado" },
 ];
 
 const pctTexto = (v: number) => `${Math.floor(v * 100)}%`;
@@ -29,7 +29,6 @@ function quando(dataISO: string) {
 
 export default function ProducaoPage() {
   const [cartoes, setCartoes] = useState<CartaoOP[]>([]);
-  const [diasFinalizadas, setDiasFinalizadas] = useState(30);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
@@ -38,9 +37,8 @@ export default function ProducaoPage() {
 
   async function carregar() {
     try {
-      const r = await api<{ cartoes: CartaoOP[]; diasFinalizadas: number }>("/api/producao");
+      const r = await api<{ cartoes: CartaoOP[] }>("/api/producao");
       setCartoes(r.cartoes);
-      setDiasFinalizadas(r.diasFinalizadas);
       setErro(null);
     } catch (e) {
       setErro(mensagemErro(e));
@@ -129,9 +127,6 @@ export default function ProducaoPage() {
                     {col.titulo}
                     <span className="contagem">{lista.length}</span>
                   </h2>
-                  <p className="fraco">
-                    {col.id === "finalizado" ? `Últimos ${diasFinalizadas} dias` : col.descricao}
-                  </p>
                 </div>
                 <span className="kanban-pecas num">
                   {pecas.toLocaleString("pt-BR")} <span className="fraco">peças</span>

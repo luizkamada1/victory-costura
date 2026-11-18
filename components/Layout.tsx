@@ -27,9 +27,9 @@ const MENU: { grupo: string; itens: ItemMenu[] }[] = [
     grupo: "Dia a dia",
     itens: [
       { href: "/dashboard", rotulo: "Dashboard", icone: LayoutDashboard },
+      { href: "/producao", rotulo: "Produção", icone: KanbanSquare },
       { href: "/apontamento", rotulo: "Apontamento", icone: ScanBarcode },
       { href: "/tickets", rotulo: "Tickets", icone: Ticket },
-      { href: "/producao", rotulo: "Produção", icone: KanbanSquare },
     ],
   },
   {

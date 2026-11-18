@@ -2290,19 +2290,14 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .kanban-cabecalho {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 2px 4px 12px;
+  padding: 2px 4px 10px;
 }
 
 .kanban-cabecalho h2 {
   font-size: 16px;
-}
-
-.kanban-cabecalho p {
-  margin: 2px 0 0;
-  font-size: 12.5px;
 }
 
 .kanban-pecas {
