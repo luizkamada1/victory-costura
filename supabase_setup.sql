@@ -127,3 +127,11 @@ alter table jornada_padrao add column if not exists horarios jsonb;
 -- Tipo da ocorrência: 'ausencia' (falta ou saída: baixa a produtividade), 'parada' (falta de luz,
 -- máquina, reunião: não afeta a produtividade) ou 'extra' (hora extra). Null = deduzido como antes.
 alter table ocorrencias add column if not exists tipo text;
+
+-- Dados de acompanhamento de cada OP no quadro de Produção: urgência e prazo de entrega
+create table if not exists op_info (
+  op text primary key,
+  urgente boolean not null default false,
+  prazo date
+);
+alter table op_info enable row level security;

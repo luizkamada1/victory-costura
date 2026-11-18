@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Search, Ticket as IconeTicket, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, Clock, Flag, Search, Ticket as IconeTicket, X } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import type { CartaoOP, Situacao } from "@/app/api/producao/route";
 import { Costureira, NOME_PARTE, PARTES, Ticket, dataBrasilia, formatarData, formatarMinutos } from "@/lib/producao";
@@ -66,8 +66,25 @@ export default function ProducaoPage() {
       (!termo || normal([c.op, ...c.referencias, ...c.nomes, ...c.cores].join(" ")).includes(termo))
   );
 
+  // grava urgência ou prazo; a tela muda na hora e volta atrás se der erro
+  async function alterarOP(op: string, mudanca: { urgente?: boolean; prazo?: string | null }) {
+    const antes = cartoes;
+    const aplicar = (c: CartaoOP) => (c.op === op ? { ...c, ...mudanca } : c);
+    setCartoes((l) => l.map(aplicar));
+    setAberta((c) => c && aplicar(c));
+    try {
+      await api("/api/producao", { method: "PATCH", body: JSON.stringify({ op, ...mudanca }) });
+      setErro(null);
+    } catch (e) {
+      setCartoes(antes);
+      setErro(mensagemErro(e));
+    }
+  }
+
   const ordenar = (situacao: Situacao, lista: CartaoOP[]) =>
     [...lista].sort((a, b) => {
+      // urgentes primeiro nas colunas que ainda têm trabalho
+      if (situacao !== "finalizado" && a.urgente !== b.urgente) return a.urgente ? -1 : 1;
       // aguardando: as mais antigas primeiro (fila); andamento: as mais adiantadas primeiro; finalizado: as mais recentes
       if (situacao === "aguardando") return a.geradoEm.localeCompare(b.geradoEm) || a.op.localeCompare(b.op, "pt-BR", { numeric: true });
       if (situacao === "andamento") return b.minutosApontados / (b.minutos || 1) - a.minutosApontados / (a.minutos || 1);
@@ -122,7 +139,7 @@ export default function ProducaoPage() {
               </header>
               <div className="kanban-cartoes">
                 {lista.map((c) => (
-                  <CartaoKanban key={c.op} cartao={c} onAbrir={() => setAberta(c)} />
+                  <CartaoKanban key={c.op} cartao={c} onAbrir={() => setAberta(c)} onAlterar={(m) => alterarOP(c.op, m)} />
                 ))}
                 {!carregando && lista.length === 0 && <div className="kanban-vazio">Nenhuma OP aqui.</div>}
                 {carregando && lista.length === 0 && <div className="kanban-vazio">Carregando…</div>}
@@ -137,22 +154,64 @@ export default function ProducaoPage() {
   );
 }
 
-function CartaoKanban({ cartao: c, onAbrir }: { cartao: CartaoOP; onAbrir: () => void }) {
+function CartaoKanban({
+  cartao: c,
+  onAbrir,
+  onAlterar,
+}: {
+  cartao: CartaoOP;
+  onAbrir: () => void;
+  onAlterar: (mudanca: { urgente?: boolean; prazo?: string | null }) => void;
+}) {
+  const campoPrazo = useRef<HTMLInputElement>(null);
   const progresso = c.minutos > 0 ? c.minutosApontados / c.minutos : 0;
   const ultimo = c.ultimoApontamento ? dataBrasilia(c.ultimoApontamento) : null;
   const parado = c.situacao === "andamento" && ultimo !== null && diasDesde(ultimo) >= DIAS_ALERTA;
   const partes = PARTES.filter((p) => c.partes[p]);
+  const diasAtraso = c.prazo && c.situacao !== "finalizado" ? diasDesde(c.prazo) : 0;
+  const atrasada = diasAtraso > 0;
+  const descricao = [c.nomes.join(", "), c.cores.join(" · ")].filter(Boolean).join(" · ");
+  const parar = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  function abrirCalendario(e: React.MouseEvent) {
+    e.stopPropagation();
+    const campo = campoPrazo.current;
+    if (!campo) return;
+    try {
+      campo.showPicker();
+    } catch {
+      campo.focus();
+    }
+  }
+
   return (
-    <button type="button" className="kanban-cartao" data-parado={parado} onClick={onAbrir}>
+    <article className="kanban-cartao" data-parado={parado} data-urgente={c.urgente} onClick={onAbrir}>
       <div className="kanban-cartao-topo">
-        <strong className="kanban-op num">OP {c.op}</strong>
-        <span className="num fraco">{c.pecas.toLocaleString("pt-BR")} pç</span>
+        <button type="button" className="kanban-op num" onClick={(e) => (parar(e), onAbrir())}>
+          OP {c.op}
+        </button>
+        <span className="num fraco kanban-medidas">
+          {c.pecas.toLocaleString("pt-BR")} pç · {formatarMinutos(c.minutos)}
+        </span>
+        <button
+          type="button"
+          className="kanban-icone kanban-urgente"
+          aria-pressed={c.urgente}
+          aria-label={c.urgente ? `Tirar urgência da OP ${c.op}` : `Marcar OP ${c.op} como urgente`}
+          title={c.urgente ? "Urgente: clique para tirar" : "Marcar como urgente"}
+          onClick={(e) => {
+            parar(e);
+            onAlterar({ urgente: !c.urgente });
+          }}
+        >
+          <Flag size={14} aria-hidden fill={c.urgente ? "currentColor" : "none"} />
+        </button>
       </div>
-      <div className="kanban-item">
+
+      <div className="kanban-item" title={[c.referencias.join(", "), descricao].filter(Boolean).join(" · ")}>
         <span className="num">{c.referencias.join(", ")}</span>
-        {c.nomes.length > 0 && <span className="fraco"> · {c.nomes.join(", ")}</span>}
+        {descricao && <span className="fraco"> · {descricao}</span>}
       </div>
-      {c.cores.length > 0 && <div className="kanban-cores fraco">{c.cores.join(" · ")}</div>}
 
       {c.situacao !== "aguardando" && (
         <div className="kanban-progresso">
@@ -160,18 +219,18 @@ function CartaoKanban({ cartao: c, onAbrir }: { cartao: CartaoOP; onAbrir: () =>
             <div style={{ width: `${progresso * 100}%` }} />
           </div>
           <span className="num">{pctTexto(progresso)}</span>
-        </div>
-      )}
-      {c.situacao === "andamento" && partes.length > 1 && (
-        <div className="kanban-partes num">
-          {partes.map((p) => {
-            const v = c.partes[p]!;
-            return (
-              <span key={p}>
-                {NOME_PARTE[p].replace("Parte ", "")} <strong>{pctTexto(v.minutos > 0 ? v.apontados / v.minutos : 0)}</strong>
-              </span>
-            );
-          })}
+          {c.situacao === "andamento" && partes.length > 1 && (
+            <span className="kanban-partes num">
+              {partes.map((p) => {
+                const v = c.partes[p]!;
+                return (
+                  <span key={p} title={NOME_PARTE[p]}>
+                    {NOME_PARTE[p].replace("Parte ", "").slice(0, 3)}. <strong>{pctTexto(v.minutos > 0 ? v.apontados / v.minutos : 0)}</strong>
+                  </span>
+                );
+              })}
+            </span>
+          )}
         </div>
       )}
 
@@ -179,17 +238,39 @@ function CartaoKanban({ cartao: c, onAbrir }: { cartao: CartaoOP; onAbrir: () =>
         {c.situacao === "aguardando" && <span>Gerada {quando(c.geradoEm)}</span>}
         {c.situacao === "andamento" &&
           (parado ? (
-            <span className="kanban-alerta">
-              <AlertTriangle size={13} aria-hidden />
-              Sem apontamento {quando(ultimo!)}
+            <span className="kanban-alerta" title={`Sem apontamento ${quando(ultimo!)}`}>
+              <AlertTriangle size={12} aria-hidden />
+              Parada {quando(ultimo!)}
             </span>
           ) : (
-            <span>Último apontamento {ultimo ? quando(ultimo) : "—"}</span>
+            <span>Apontada {ultimo ? quando(ultimo) : "—"}</span>
           ))}
-        {c.situacao === "finalizado" && <span>Finalizada {ultimo ? `em ${formatarData(ultimo)}` : ""}</span>}
-        <span className="num">{formatarMinutos(c.minutos)}</span>
+        {c.situacao === "finalizado" && <span>Finalizada {ultimo ? `em ${formatarData(ultimo).slice(0, 5)}` : ""}</span>}
+
+        <span className="kanban-prazo" data-atrasada={atrasada}>
+          <button
+            type="button"
+            className="kanban-prazo-botao num"
+            title={atrasada ? `Atrasada ${diasAtraso} ${diasAtraso === 1 ? "dia" : "dias"}. Clique para mudar o prazo` : "Prazo de entrega"}
+            aria-label={c.prazo ? `Prazo de entrega ${formatarData(c.prazo)}. Alterar` : `Definir prazo de entrega da OP ${c.op}`}
+            onClick={abrirCalendario}
+          >
+            {atrasada ? <Clock size={12} aria-hidden /> : <CalendarDays size={12} aria-hidden />}
+            {c.prazo ? formatarData(c.prazo).slice(0, 5) : "Prazo"}
+            {atrasada && <span>· atrasada {diasAtraso}d</span>}
+          </button>
+          <input
+            ref={campoPrazo}
+            type="date"
+            tabIndex={-1}
+            aria-hidden
+            value={c.prazo ?? ""}
+            onClick={parar}
+            onChange={(e) => onAlterar({ prazo: e.target.value || null })}
+          />
+        </span>
       </div>
-    </button>
+    </article>
   );
 }
 
