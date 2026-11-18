@@ -10,6 +10,7 @@ import { TituloRecolhivel } from "@/components/Recolhivel";
 import GraficoCostureiras, { Ordem } from "@/components/GraficoCostureiras";
 import GraficoPecas from "@/components/GraficoPecas";
 import FilaMaquinas from "@/components/FilaMaquinas";
+import CapacidadeCostura from "@/components/CapacidadeCostura";
 import type { ResumoPecas } from "@/lib/pecas";
 import { DIAS_SEMANA, corEficiencia, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
 
@@ -408,6 +409,8 @@ export default function DashboardPage() {
               <GraficoPecas dias={pecas?.porDia ?? []} carregando={carregando} />
             </section>
           </div>
+
+          <CapacidadeCostura inicio={inicio} fim={fim} pecasSaida={pecas?.total ?? 0} />
 
           <section className="bloco" aria-busy={carregando}>
             <div className="bloco-cabecalho" style={{ alignItems: "flex-start", marginBottom: 10 }}>

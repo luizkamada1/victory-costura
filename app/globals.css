@@ -2830,3 +2830,50 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
+/* dashboard: a costura está dando conta? */
+.capacidade-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  transition: opacity 150ms ease;
+}
+
+.capacidade-kpis > div {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--superficie-2);
+}
+
+.capacidade-kpis strong {
+  font-family: var(--fonte-titulo);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.fila-area {
+  fill: var(--ok);
+  opacity: 0.1;
+}
+
+.fila-area-sobe {
+  fill: var(--erro);
+}
+
+.fila-linha-sobe {
+  stroke: var(--erro);
+}
+
+.fila-linha-desce {
+  stroke: var(--ok);
+}
+
+@media (max-width: 760px) {
+  .capacidade-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
