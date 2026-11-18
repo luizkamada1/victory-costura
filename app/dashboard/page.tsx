@@ -410,8 +410,6 @@ export default function DashboardPage() {
             </section>
           </div>
 
-          <CapacidadeCostura inicio={inicio} fim={fim} pecasSaida={pecas?.total ?? 0} />
-
           <section className="bloco" aria-busy={carregando}>
             <div className="bloco-cabecalho" style={{ alignItems: "flex-start", marginBottom: 10 }}>
               <div>
@@ -443,10 +441,12 @@ export default function DashboardPage() {
             </div>
             <GraficoCostureiras barras={visiveis.filter((l) => l.previsto > 0)} ordem={ordemBarras} carregando={carregando} />
           </section>
+
+          <CapacidadeCostura inicio={inicio} fim={fim} pecasSaida={pecas?.total ?? 0} />
+
+          <FilaMaquinas />
         </div>
       )}
-
-      <FilaMaquinas />
 
       <section className="bloco" aria-busy={carregando}>
         <div className="bloco-cabecalho">
