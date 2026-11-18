@@ -83,6 +83,12 @@ export default function ProducaoPage() {
     [...lista].sort((a, b) => {
       // urgentes primeiro nas colunas que ainda têm trabalho
       if (situacao !== "finalizado" && a.urgente !== b.urgente) return a.urgente ? -1 : 1;
+      // depois, o prazo mais próximo primeiro; quem não tem prazo fica por último
+      if (situacao !== "finalizado" && a.prazo !== b.prazo) {
+        if (!a.prazo) return 1;
+        if (!b.prazo) return -1;
+        return a.prazo.localeCompare(b.prazo);
+      }
       // aguardando: as mais antigas primeiro (fila); andamento: as mais adiantadas primeiro; finalizado: as mais recentes
       if (situacao === "aguardando") return a.geradoEm.localeCompare(b.geradoEm) || a.op.localeCompare(b.op, "pt-BR", { numeric: true });
       if (situacao === "andamento") return b.minutosApontados / (b.minutos || 1) - a.minutosApontados / (a.minutos || 1);
@@ -90,7 +96,7 @@ export default function ProducaoPage() {
     });
 
   return (
-    <ProducaoLayout titulo="Produção" subtitulo="Cada OP anda sozinha pelo quadro conforme os cupons são apontados.">
+    <ProducaoLayout titulo="Produção">
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
       <div className="kanban-filtros">
