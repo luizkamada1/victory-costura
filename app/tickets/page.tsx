@@ -532,17 +532,6 @@ export default function TicketsPage() {
               </button>
             )}
             {selecionados.size > 0 && (
-              <button
-                type="button"
-                className="botao botao-contorno"
-                onClick={() => setTicketCupons(Array.from(selecionados))}
-                title="Imprimir só algumas operações dos tickets selecionados"
-              >
-                <TicketPlus size={16} aria-hidden />
-                Escolher operações
-              </button>
-            )}
-            {selecionados.size > 0 && (
               <button type="button" className="botao botao-primario" onClick={() => imprimir(Array.from(selecionados))}>
                 <Printer size={16} aria-hidden />
                 Imprimir {selecionados.size}
