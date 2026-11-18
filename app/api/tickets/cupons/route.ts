@@ -132,3 +132,29 @@ export async function POST(req: NextRequest) {
     return respostaErro(err);
   }
 }
+
+// body: { ticket_id, operacao_ids: [..] } → dá essas operações como concluídas: os cupons delas ainda
+// não apontados saem do ticket (foram feitas fora do sistema e não contam na eficiência de ninguém).
+// Cupons já apontados nunca saem.
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const ticketId = Number(body.ticket_id);
+    const operacoes: number[] = (Array.isArray(body.operacao_ids) ? body.operacao_ids : []).map(Number).filter((n: number) => n > 0);
+    if (!ticketId) return respostaErro(new Error("Informe o número do ticket"), 400);
+    if (!operacoes.length) return respostaErro(new Error("Escolha ao menos uma operação"), 400);
+    const supabase = getSupabaseServer();
+    const { data, error } = await supabase
+      .from("ticket_operacoes")
+      .delete()
+      .eq("ticket_id", ticketId)
+      .in("operacao_id", operacoes)
+      .is("costureira_id", null)
+      .select("id");
+    if (error) throw error;
+    return NextResponse.json({ ok: true, concluidas: data?.length ?? 0 });
+  } catch (err) {
+    return respostaErro(err);
+  }
+}
+

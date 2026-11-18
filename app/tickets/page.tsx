@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { ChevronRight, FilePlus2, Printer, Search, TicketPlus, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, FilePlus2, Printer, Search, TicketPlus, Trash2, X } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
 import {
@@ -41,7 +41,7 @@ export default function TicketsPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
   const [gerados, setGerados] = useState<number | null>(null);
-  const [ticketCupons, setTicketCupons] = useState<number | null>(null);
+  const [ticketCupons, setTicketCupons] = useState<number[] | null>(null);
   const [avisoLista, setAvisoLista] = useState<{ tipo: "ok" | "alerta"; texto: string } | null>(null);
   const [ajustes, setAjustes] = useState<AjustesGrade>({ ...AJUSTES_PADRAO });
 
@@ -253,8 +253,20 @@ export default function TicketsPage() {
     }
   }
 
+  // Ao imprimir tickets que já têm cupons apontados, pergunta se imprime só o que falta ou tudo
+  const [perguntaImpressao, setPerguntaImpressao] = useState<number[] | null>(null);
   function imprimir(ids: number[]) {
-    window.open(`/tickets/imprimir?ids=${ids.join(",")}`, "_blank");
+    const escolhidos = tickets.filter((t) => ids.includes(t.id));
+    const temApontado = escolhidos.some((t) => t.operacoes.some((o) => o.costureira_id));
+    const temPendente = escolhidos.some((t) => t.operacoes.some((o) => !o.costureira_id));
+    if (temApontado && temPendente) setPerguntaImpressao(ids);
+    else window.open(`/tickets/imprimir?ids=${ids.join(",")}`, "_blank");
+  }
+  function imprimirPendentes(ids: number[]) {
+    const escolhidos = tickets.filter((t) => ids.includes(t.id));
+    const cupons = escolhidos.flatMap((t) => t.operacoes.filter((o) => !o.costureira_id).map((o) => o.id));
+    const comPendente = escolhidos.filter((t) => t.operacoes.some((o) => !o.costureira_id)).map((t) => t.id);
+    window.open(`/tickets/imprimir?ids=${comPendente.join(",")}&cupons=${cupons.join(",")}`, "_blank");
   }
 
   const nomeCostureira = (id: number | null) => costureiras.find((c) => c.id === id)?.nome ?? "—";
@@ -469,11 +481,26 @@ export default function TicketsPage() {
         )}
       </form>
 
+      {perguntaImpressao !== null && (
+        <ModalPerguntaImpressao
+          tickets={tickets.filter((t) => perguntaImpressao.includes(t.id))}
+          onFechar={() => setPerguntaImpressao(null)}
+          onPendentes={() => {
+            imprimirPendentes(perguntaImpressao);
+            setPerguntaImpressao(null);
+          }}
+          onTudo={() => {
+            window.open(`/tickets/imprimir?ids=${perguntaImpressao.join(",")}`, "_blank");
+            setPerguntaImpressao(null);
+          }}
+        />
+      )}
+
       {ticketCupons !== null && (
         <ModalCupons
-          ticketId={ticketCupons}
+          ticketIds={ticketCupons}
           onFechar={() => setTicketCupons(null)}
-          onImpresso={() => carregarTickets(buscaOp, selecionados)}
+          onMudou={() => carregarTickets(buscaOp, selecionados)}
         />
       )}
 
@@ -502,6 +529,17 @@ export default function TicketsPage() {
               <button type="button" className="botao botao-contorno botao-excluir" onClick={excluirSelecionados}>
                 <Trash2 size={16} aria-hidden />
                 Excluir {selecionados.size}
+              </button>
+            )}
+            {selecionados.size > 0 && (
+              <button
+                type="button"
+                className="botao botao-contorno"
+                onClick={() => setTicketCupons(Array.from(selecionados))}
+                title="Imprimir só algumas operações dos tickets selecionados"
+              >
+                <TicketPlus size={16} aria-hidden />
+                Escolher operações
               </button>
             )}
             {selecionados.size > 0 && (
@@ -619,7 +657,7 @@ export default function TicketsPage() {
                             <button
                               type="button"
                               className="botao botao-pequeno botao-icone botao-fantasma"
-                              onClick={() => setTicketCupons(t.id)}
+                              onClick={() => setTicketCupons([t.id])}
                               aria-label={`Imprimir cupons avulsos do ticket ${t.id}`}
                               title="Imprimir cupons avulsos"
                             >
@@ -738,24 +776,43 @@ type DadosCupons = {
   sequencia: OperacaoDoItem[];
 };
 
-// Janela para imprimir cupons avulsos de um ticket: lista as operações atuais do item e imprime as
-// marcadas. Se o ticket ainda não tiver o cupom de uma delas (operação incluída no item depois),
-// o servidor cria esse cupom no próprio ticket, e ele pode ser apontado normalmente.
-function ModalCupons({ ticketId, onFechar, onImpresso }: { ticketId: number; onFechar: () => void; onImpresso: () => void }) {
+// Janela de cupons de um ou vários tickets: lista as operações atuais dos itens. Com as marcadas dá para
+// imprimir (o servidor cria o cupom que o ticket ainda não tiver) ou dar como concluídas (feitas fora do
+// sistema: os cupons não apontados delas saem dos tickets e não contam na eficiência de ninguém).
+function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; onFechar: () => void; onMudou: () => void }) {
   const janela = useRef<HTMLDialogElement>(null);
-  const [dados, setDados] = useState<DadosCupons | null>(null);
+  const [dados, setDados] = useState<DadosCupons[] | null>(null);
   const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  // operações já feitas fora do sistema: as não marcadas saem do ticket
-  const [concluirOutras, setConcluirOutras] = useState(false);
+  const varios = ticketIds.length > 1;
 
-  useEffect(() => {
-    janela.current?.showModal();
-    api<DadosCupons>(`/api/tickets/cupons?ticket=${ticketId}`)
+  function carregar() {
+    return Promise.all(ticketIds.map((id) => api<DadosCupons>(`/api/tickets/cupons?ticket=${id}`)))
       .then(setDados)
       .catch((e) => setErro(mensagemErro(e)));
-  }, [ticketId]);
+  }
+  useEffect(() => {
+    janela.current?.showModal();
+    carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // operações de todos os tickets, uma linha por operação (a mesma operação pode estar em vários)
+  type Linha = OperacaoDoItem & { tickets: number; apontados: number; comCupom: number };
+  const linhas: Linha[] = [];
+  for (const d of dados ?? []) {
+    for (const o of d.sequencia) {
+      const atual = linhas.find((l) => l.operacao_id === o.operacao_id);
+      if (atual) {
+        atual.tickets += 1;
+        if (o.apontado) atual.apontados += 1;
+        if (o.cupom_id) atual.comCupom += 1;
+      } else linhas.push({ ...o, tickets: 1, apontados: o.apontado ? 1 : 0, comCupom: o.cupom_id ? 1 : 0 });
+    }
+  }
+  linhas.sort((a, b) => PARTES.indexOf(a.parte) - PARTES.indexOf(b.parte) || a.ordem - b.ordem);
 
   function alternar(id: number) {
     const n = new Set(marcadas);
@@ -764,36 +821,72 @@ function ModalCupons({ ticketId, onFechar, onImpresso }: { ticketId: number; onF
     setMarcadas(n);
   }
 
-  // cupons que sairiam do ticket: não marcados, existentes e ainda não apontados
-  const sairao = (dados?.sequencia ?? []).filter((o) => !marcadas.has(o.operacao_id) && o.cupom_id && !o.apontado);
+  // cupons marcados, por ticket
+  const marcadosPorTicket = (dados ?? []).map((d) => ({ d, ops: d.sequencia.filter((o) => marcadas.has(o.operacao_id)) }));
+  const totalImprimir = marcadosPorTicket.reduce((s, x) => s + x.ops.length, 0);
+  // os que podem ser dados como concluídos: têm cupom e ainda não foram apontados
+  const concluiveis = marcadosPorTicket.flatMap((x) => x.ops.filter((o) => o.cupom_id && !o.apontado));
 
   async function imprimir() {
     if (!dados || !marcadas.size) return;
+    setErro(null);
+    setOcupado(true);
+    const aba = window.open("", "_blank");
+    try {
+      const cupons: number[] = [];
+      const impressos: number[] = [];
+      for (const { d, ops } of marcadosPorTicket) {
+        if (!ops.length) continue;
+        const r = await api<{ cupons: number[] }>("/api/tickets/cupons", {
+          method: "POST",
+          body: JSON.stringify({ ticket_id: d.ticket.id, operacao_ids: ops.map((o) => o.operacao_id) }),
+        });
+        cupons.push(...r.cupons);
+        impressos.push(d.ticket.id);
+      }
+      const url = `/tickets/imprimir?ids=${impressos.join(",")}&cupons=${cupons.join(",")}`;
+      if (aba) aba.location.href = url;
+      else window.open(url, "_blank");
+      onMudou();
+      onFechar();
+    } catch (e) {
+      aba?.close();
+      setErro(mensagemErro(e));
+      onMudou();
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function concluir() {
+    if (!dados || !concluiveis.length) return;
+    const nomes = Array.from(new Set(concluiveis.map((o) => o.nome)));
     if (
-      concluirOutras &&
-      sairao.length > 0 &&
       !confirm(
-        `${sairao.length} ${sairao.length === 1 ? "operação sai" : "operações saem"} do ticket #${dados.ticket.id} ` +
-          `(${sairao.map((o) => o.nome).join(", ")}).\n\nO ticket fica concluído quando as marcadas forem apontadas. ` +
-          "As que saem não contam na eficiência de ninguém. Continuar?"
+        `Dar como concluídas: ${nomes.join(", ")}.\n\n${concluiveis.length} ${concluiveis.length === 1 ? "cupom sai" : "cupons saem"} ` +
+          `${varios ? "dos tickets" : "do ticket"} e não ${concluiveis.length === 1 ? "conta" : "contam"} na eficiência de ninguém. ` +
+          "Use para operações feitas fora do sistema. Continuar?"
       )
     )
       return;
     setErro(null);
     setOcupado(true);
-    const aba = window.open("", "_blank");
     try {
-      const r = await api<{ cupons: number[] }>("/api/tickets/cupons", {
-        method: "POST",
-        body: JSON.stringify({ ticket_id: dados.ticket.id, operacao_ids: Array.from(marcadas), remover_outras: concluirOutras }),
-      });
-      const url = `/tickets/imprimir?ids=${dados.ticket.id}&cupons=${r.cupons.join(",")}`;
-      if (aba) aba.location.href = url;
-      else window.open(url, "_blank");
-      onImpresso();
-      onFechar();
+      let feitos = 0;
+      for (const { d, ops } of marcadosPorTicket) {
+        const ids = ops.filter((o) => o.cupom_id && !o.apontado).map((o) => o.operacao_id);
+        if (!ids.length) continue;
+        const r = await api<{ concluidas: number }>("/api/tickets/cupons", {
+          method: "PATCH",
+          body: JSON.stringify({ ticket_id: d.ticket.id, operacao_ids: ids }),
+        });
+        feitos += r.concluidas;
+      }
+      setMarcadas(new Set());
+      setAviso(`${feitos} ${feitos === 1 ? "cupom dado como concluído" : "cupons dados como concluídos"}. Agora é só marcar o que falta e imprimir.`);
+      await carregar();
+      onMudou();
     } catch (e) {
-      aba?.close();
       setErro(mensagemErro(e));
     } finally {
       setOcupado(false);
@@ -810,11 +903,17 @@ function ModalCupons({ ticketId, onFechar, onImpresso }: { ticketId: number; onF
       <div className="modal-conteudo">
         <div className="modal-cabecalho">
           <div>
-            <h2>Cupons do ticket #{ticketId}</h2>
-            {dados && (
+            <h2>{varios ? `Cupons de ${ticketIds.length} tickets` : `Cupons do ticket #${ticketIds[0]}`}</h2>
+            {dados && !varios && (
               <p className="bloco-descricao num">
-                OP {dados.ticket.op} · Ref {dados.ticket.referencia} · {dados.ticket.cor ?? "—"} · Tam{" "}
-                {dados.ticket.tamanho ?? "—"} · {dados.ticket.quantidade} peças
+                OP {dados[0].ticket.op} · Ref {dados[0].ticket.referencia} · {dados[0].ticket.cor ?? "—"} · Tam{" "}
+                {dados[0].ticket.tamanho ?? "—"} · {dados[0].ticket.quantidade} peças
+              </p>
+            )}
+            {dados && varios && (
+              <p className="bloco-descricao num">
+                {Array.from(new Set(dados.map((d) => `OP ${d.ticket.op}`))).join(", ")} ·{" "}
+                {dados.reduce((s, d) => s + d.ticket.quantidade, 0).toLocaleString("pt-BR")} peças
               </p>
             )}
           </div>
@@ -829,69 +928,131 @@ function ModalCupons({ ticketId, onFechar, onImpresso }: { ticketId: number; onF
         </div>
 
         {erro && <Aviso tipo="erro">{erro}</Aviso>}
+        {aviso && <Aviso tipo="ok">{aviso}</Aviso>}
         {!dados && !erro && <div className="vazio">Carregando as operações…</div>}
 
         {dados && (
           <>
             <p className="bloco-descricao" style={{ margin: "0 0 8px" }}>
-              Marque as operações que deseja imprimir.
+              Marque as operações e escolha: imprimir os cupons delas ou dar como concluídas
+              {varios ? ". Vale para todos os tickets que tiverem cada uma" : ""}.
             </p>
-            {dados.sequencia.length === 0 ? (
-              <div className="vazio">O item deste ticket não tem operações cadastradas.</div>
+            {linhas.length === 0 ? (
+              <div className="vazio">O item {varios ? "desses tickets" : "deste ticket"} não tem operações cadastradas.</div>
             ) : (
               <ul className="modal-lista">
-                {dados.sequencia.map((o) => (
-                  <li key={o.operacao_id}>
-                    <label data-marcada={marcadas.has(o.operacao_id)}>
-                      <input type="checkbox" checked={marcadas.has(o.operacao_id)} onChange={() => alternar(o.operacao_id)} />
-                      <span className={`selo selo-${o.parte}`}>{NOME_PARTE[o.parte].replace("Parte ", "")}</span>
-                      <span className="forte num">{o.ordem}ª</span>
-                      <span className="modal-lista-nome">{o.nome}</span>
-                      <span className="fraco">{o.maquina ?? "—"}</span>
-                      {o.apontado ? (
-                        <span className="selo selo-tipo-extra">apontada</span>
-                      ) : !o.cupom_id ? (
-                        <span className="selo">sem cupom</span>
-                      ) : null}
-                    </label>
-                  </li>
-                ))}
+                {linhas.map((o) => {
+                  const concluida = o.comCupom === 0 && o.apontados === 0;
+                  return (
+                    <li key={o.operacao_id}>
+                      <label data-marcada={marcadas.has(o.operacao_id)}>
+                        <input type="checkbox" checked={marcadas.has(o.operacao_id)} onChange={() => alternar(o.operacao_id)} />
+                        <span className={`selo selo-${o.parte}`}>{NOME_PARTE[o.parte].replace("Parte ", "")}</span>
+                        <span className="forte num">{o.ordem}ª</span>
+                        <span className="modal-lista-nome">{o.nome}</span>
+                        <span className="fraco">{o.maquina ?? "—"}</span>
+                        <span className="num">
+                          {varios && o.tickets < dados.length && (
+                            <span className="fraco" style={{ marginRight: 6 }}>
+                              {o.tickets} de {dados.length}
+                            </span>
+                          )}
+                          {o.apontados > 0 ? (
+                            <span className="selo selo-tipo-extra">
+                              {o.apontados === o.tickets ? "apontada" : `apontada em ${o.apontados}`}
+                            </span>
+                          ) : concluida ? (
+                            <span className="selo" title="Sem cupom no ticket: dada como concluída ou incluída no item depois">
+                              sem cupom
+                            </span>
+                          ) : null}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
               </ul>
-            )}
-            {dados.sequencia.length > 0 && (
-              <label className="opcao-concluir" data-marcada={concluirOutras}>
-                <input type="checkbox" checked={concluirOutras} onChange={(e) => setConcluirOutras(e.target.checked)} />
-                <span>
-                  <strong>Dar as outras operações como feitas</strong>
-                  <span className="fraco">
-                    {" "}
-                    As não marcadas que ainda não foram apontadas saem do ticket, e ele fica concluído quando as marcadas
-                    forem apontadas.
-                    {concluirOutras && marcadas.size > 0 && (
-                      <>
-                        {" "}
-                        {sairao.length
-                          ? `Saem ${sairao.length}: ${sairao.map((o) => o.nome).join(", ")}.`
-                          : "Nenhuma operação sai."}
-                      </>
-                    )}
-                  </span>
-                </span>
-              </label>
             )}
           </>
         )}
 
         <div className="modal-rodape">
           <button type="button" className="botao botao-contorno" onClick={() => janela.current?.close()}>
-            Cancelar
+            Fechar
+          </button>
+          <button
+            type="button"
+            className="botao botao-contorno"
+            disabled={!concluiveis.length || ocupado}
+            onClick={concluir}
+            title="Para operações feitas fora do sistema: saem do ticket sem contar para ninguém"
+          >
+            <Check size={16} aria-hidden />
+            Dar como concluídas
           </button>
           <button type="button" className="botao botao-primario" disabled={!marcadas.size || ocupado} onClick={imprimir}>
             <Printer size={16} aria-hidden />
-            {ocupado ? "Preparando…" : `Imprimir ${marcadas.size || ""} ${marcadas.size === 1 ? "cupom" : "cupons"}`.replace("  ", " ")}
+            {ocupado ? "Aguarde…" : `Imprimir ${totalImprimir || ""} ${totalImprimir === 1 ? "cupom" : "cupons"}`.replace("  ", " ")}
           </button>
         </div>
       </div>
     </dialog>
   );
 }
+
+// Pergunta, ao imprimir tickets que já têm cupons apontados, se sai só o que falta fazer ou tudo
+function ModalPerguntaImpressao({
+  tickets,
+  onFechar,
+  onPendentes,
+  onTudo,
+}: {
+  tickets: Ticket[];
+  onFechar: () => void;
+  onPendentes: () => void;
+  onTudo: () => void;
+}) {
+  const janela = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    janela.current?.showModal();
+  }, []);
+  const todos = tickets.reduce((s, t) => s + t.operacoes.length, 0);
+  const pendentes = tickets.reduce((s, t) => s + t.operacoes.filter((o) => !o.costureira_id).length, 0);
+  const varios = tickets.length > 1;
+  return (
+    <dialog
+      ref={janela}
+      className="modal"
+      onClose={onFechar}
+      onClick={(e) => e.target === janela.current && janela.current?.close()}
+    >
+      <div className="modal-conteudo">
+        <div className="modal-cabecalho">
+          <div>
+            <h2>O que imprimir?</h2>
+            <p className="bloco-descricao">
+              {varios ? `Desses ${tickets.length} tickets, ` : "Deste ticket, "}
+              {todos - pendentes} de {todos} cupons já foram apontados.
+            </p>
+          </div>
+          <button type="button" className="botao botao-pequeno botao-icone botao-fantasma" onClick={() => janela.current?.close()} aria-label="Fechar">
+            <X size={16} aria-hidden />
+          </button>
+        </div>
+        <div className="escolha-impressao">
+          <button type="button" className="escolha-opcao" onClick={onPendentes} autoFocus>
+            <strong>Só o que falta fazer</strong>
+            <span className="fraco num">
+              {pendentes} {pendentes === 1 ? "cupom" : "cupons"}: o ticket sai só com as operações pendentes
+            </span>
+          </button>
+          <button type="button" className="escolha-opcao" onClick={onTudo}>
+            <strong>Tudo</strong>
+            <span className="fraco num">{todos} cupons: o ticket sai com todas as operações</span>
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+

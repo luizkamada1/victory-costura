@@ -2793,25 +2793,40 @@ input[type="number"]::-webkit-inner-spin-button {
   font-size: 13px;
 }
 
-/* tickets: imprimir só as operações que faltam e dar as outras como feitas */
-.opcao-concluir {
-  display: flex;
-  align-items: flex-start;
+/* tickets: imprimir só o que falta ou tudo */
+.escolha-impressao {
+  display: grid;
   gap: 10px;
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  margin-top: 4px;
+}
+
+.escolha-opcao {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 14px;
   background: var(--superficie-2);
-  font-size: 13.5px;
-  line-height: 1.4;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--tinta);
+  text-align: left;
   cursor: pointer;
+  transition: background-color 140ms ease, transform 140ms ease;
 }
 
-.opcao-concluir[data-marcada="true"] {
-  background: var(--rosa-claro);
+.escolha-opcao span {
+  font-size: 13px;
 }
 
-.opcao-concluir input {
-  margin-top: 2px;
-  accent-color: var(--rosa-escuro);
+.escolha-opcao:active {
+  transform: scale(0.99);
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .escolha-opcao:hover {
+    background: var(--rosa-claro);
+  }
+}
+
