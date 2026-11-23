@@ -885,7 +885,7 @@ function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; on
   return (
     <dialog
       ref={janela}
-      className="modal"
+      className="modal modal-cupons"
       onClose={onFechar}
       onClick={(e) => e.target === janela.current && janela.current?.close()}
     >

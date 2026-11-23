@@ -2982,3 +2982,33 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
+/* tickets: janela de cupons mais larga, uma operação por linha */
+.modal-cupons {
+  width: min(880px, calc(100vw - 32px));
+}
+
+.modal-cupons .modal-lista {
+  max-height: calc(100vh - 260px);
+}
+
+.modal-cupons .modal-lista label {
+  grid-template-columns: 18px 64px 30px minmax(0, 1fr) auto auto;
+}
+
+.modal-cupons .modal-lista label > :nth-child(5),
+.modal-cupons .modal-lista label > :nth-child(6) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .modal-cupons .modal-lista label {
+    grid-template-columns: 18px 64px 30px minmax(0, 1fr) auto;
+  }
+
+  .modal-cupons .modal-lista label > :nth-child(6) {
+    grid-column: 4 / -1;
+    text-align: left;
+  }
+}
+
