@@ -2216,6 +2216,11 @@ input[type="number"]::-webkit-inner-spin-button {
   color: var(--tinta-3);
 }
 
+.selo-tipo-conserto {
+  background: #fdf1dc;
+  color: #96600a;
+}
+
 .selo-tipo-extra {
   background: #e3f3e8;
   color: var(--ok);
@@ -3012,3 +3017,50 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
+
+/* dashboard: conserto de serviço de oficina */
+.conserto-lista {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.conserto-linha {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.2fr) 2fr 70px;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 6px;
+}
+
+.conserto-nome {
+  display: grid;
+  min-width: 0;
+}
+
+.conserto-nome span,
+.conserto-nome small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conserto-barra {
+  background: #fdf1dc;
+}
+
+.conserto-barra span {
+  background: #d99a2b;
+}
+
+@media (max-width: 760px) {
+  .conserto-linha {
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+  }
+
+  .conserto-barra {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

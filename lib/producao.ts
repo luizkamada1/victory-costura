@@ -92,7 +92,7 @@ export type Ticket = {
   operacoes: TicketOperacao[];
 };
 
-export type TipoOcorrencia = "ausencia" | "parada" | "extra";
+export type TipoOcorrencia = "ausencia" | "parada" | "conserto" | "extra";
 
 export type Ocorrencia = {
   id: number;
@@ -106,13 +106,26 @@ export type Ocorrencia = {
 export const TIPOS_OCORRENCIA: Record<TipoOcorrencia, { nome: string; dica: string }> = {
   ausencia: { nome: "Falta ou saída", dica: "A costureira se ausentou. Conta como ausência e baixa a produtividade." },
   parada: { nome: "Parada", dica: "Falta de luz, máquina quebrada, reunião, sem expediente. Não afeta a produtividade." },
+  conserto: {
+    nome: "Conserto de oficina",
+    dica: "Consertando serviço que veio de oficina externa. Não afeta a eficiência nem a produtividade dela.",
+  },
   extra: { nome: "Hora extra", dica: "Tempo trabalhado além da jornada." },
 };
+
+// Oficina/OP do conserto: o motivo sem o horário que o formulário acrescenta ("Oficina X (10:00 às 11:30)")
+export function oficinaDoConserto(descricao: string | null | undefined) {
+  const limpo = String(descricao ?? "")
+    .replace(/^Das \d.*$/, "")
+    .replace(/\s*\([^()]*\)\s*$/, "")
+    .trim();
+  return limpo || "Sem oficina informada";
+}
 
 // Ocorrências antigas não têm tipo: deduz pela regra de antes
 // (somar = hora extra; tirar de uma costureira = ausência; tirar da fábrica toda = parada)
 export function tipoDaOcorrencia(o: Pick<Ocorrencia, "minutos" | "costureira_id" | "tipo">): TipoOcorrencia {
-  if (o.tipo === "ausencia" || o.tipo === "parada" || o.tipo === "extra") return o.tipo;
+  if (o.tipo === "ausencia" || o.tipo === "parada" || o.tipo === "conserto" || o.tipo === "extra") return o.tipo;
   if (o.minutos > 0) return "extra";
   return o.costureira_id ? "ausencia" : "parada";
 }

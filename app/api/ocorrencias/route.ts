@@ -55,11 +55,16 @@ export async function POST(req: NextRequest) {
 
     const tipoPedido = String(body.tipo ?? "");
     const tipo: TipoOcorrencia | null =
-      tipoPedido === "ausencia" || tipoPedido === "parada" || tipoPedido === "extra" ? tipoPedido : null;
+      tipoPedido === "ausencia" || tipoPedido === "parada" || tipoPedido === "conserto" || tipoPedido === "extra"
+        ? tipoPedido
+        : null;
     if (tipo === "ausencia" && !ids.length) {
       return respostaErro(new Error("Falta ou saída é de uma costureira: escolha quem faltou."), 400);
     }
-    // o sinal vem do tipo: hora extra soma, falta e parada tiram
+    if (tipo === "conserto" && !ids.length) {
+      return respostaErro(new Error("Escolha quem fez o conserto no campo Costureiras."), 400);
+    }
+    // o sinal vem do tipo: hora extra soma, falta, parada e conserto tiram
     const sinal = (m: number) => (tipo ? (tipo === "extra" ? Math.abs(m) : -Math.abs(m)) : m);
     const linhas = (ids.length ? ids : [null]).map((id) => ({
       costureira_id: id,

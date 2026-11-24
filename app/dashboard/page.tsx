@@ -11,6 +11,7 @@ import GraficoCostureiras, { Ordem } from "@/components/GraficoCostureiras";
 import GraficoPecas from "@/components/GraficoPecas";
 import FilaMaquinas from "@/components/FilaMaquinas";
 import CapacidadeCostura from "@/components/CapacidadeCostura";
+import ConsertoOficinas, { ResumoConsertos } from "@/components/ConsertoOficinas";
 import type { ResumoPecas } from "@/lib/pecas";
 import { DIAS_SEMANA, corEficiencia, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
 
@@ -107,6 +108,7 @@ export default function DashboardPage() {
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [ultimoApontado, setUltimoApontado] = useState<string | null>(null);
   const [pecas, setPecas] = useState<ResumoPecas | null>(null);
+  const [consertos, setConsertos] = useState<ResumoConsertos | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
@@ -134,11 +136,12 @@ export default function DashboardPage() {
     if (!inicio || !fim) return;
     setCarregando(true);
     setErro(null);
-    api<{ costureiras: Linha[]; ultimoApontado?: string | null; pecas?: ResumoPecas }>(`/api/eficiencia?inicio=${inicio}&fim=${fim}`)
+    api<{ costureiras: Linha[]; ultimoApontado?: string | null; pecas?: ResumoPecas; consertos?: ResumoConsertos }>(`/api/eficiencia?inicio=${inicio}&fim=${fim}`)
       .then((r) => {
         setLinhas(r.costureiras);
         setUltimoApontado(r.ultimoApontado ?? null);
         setPecas(r.pecas ?? null);
+        setConsertos(r.consertos ?? null);
       })
       .catch((e) => setErro(mensagemErro(e)))
       .finally(() => setCarregando(false));
@@ -443,6 +446,14 @@ export default function DashboardPage() {
           </section>
 
           <CapacidadeCostura inicio={inicio} fim={fim} pecasSaida={pecas?.total ?? 0} />
+
+          {consertos && consertos.minutos > 0 && (
+            <ConsertoOficinas
+              consertos={consertos}
+              minutosTrabalhados={linhas.reduce((s, l) => s + l.disponivel, 0) + consertos.minutos}
+              carregando={carregando}
+            />
+          )}
 
           <FilaMaquinas />
         </div>

@@ -153,6 +153,7 @@ export default function JornadaPage() {
   const total = intervaloValido ? fimMin! - ini! : 0;
   const dentro = intervaloValido ? (periodosDoDia ? minutosDentroDosPeriodos(form.inicio, form.fim, periodosDoDia) : total) : 0;
   const reduz = form.tipo !== "extra";
+  const precisaCostureira = form.tipo === "ausencia" || form.tipo === "conserto";
   const minutosDoHorarioInformado = reduz ? dentro : total - (periodosDoDia ? dentro : 0);
   const foraDoCalculo = total - minutosDoHorarioInformado;
 
@@ -161,6 +162,10 @@ export default function JornadaPage() {
     setErro(null);
     if (form.tipo === "ausencia" && form.costureiras.length === 0) {
       setErro("Falta ou saída é de uma costureira: escolha quem faltou no campo Costureiras.");
+      return;
+    }
+    if (form.tipo === "conserto" && form.costureiras.length === 0) {
+      setErro("Escolha quem fez o conserto no campo Costureiras.");
       return;
     }
     const sinal = reduz ? -1 : 1;
@@ -426,7 +431,9 @@ export default function JornadaPage() {
                         form.diaInteiro && (form.descricao === "Falta" || form.descricao === "Sem expediente")
                           ? t === "ausencia"
                             ? "Falta"
-                            : "Sem expediente"
+                            : t === "conserto"
+                              ? ""
+                              : "Sem expediente"
                           : form.descricao,
                     })
                   }
@@ -435,9 +442,11 @@ export default function JornadaPage() {
                 </button>
               ))}
             </div>
-            <small className={form.tipo === "ausencia" && form.costureiras.length === 0 ? "aviso-horario" : undefined}>
-              {form.tipo === "ausencia" && form.costureiras.length === 0
-                ? "Escolha quem faltou no campo Costureiras."
+            <small className={precisaCostureira && form.costureiras.length === 0 ? "aviso-horario" : undefined}>
+              {precisaCostureira && form.costureiras.length === 0
+                ? form.tipo === "conserto"
+                  ? "Escolha quem fez o conserto no campo Costureiras."
+                  : "Escolha quem faltou no campo Costureiras."
                 : TIPOS_OCORRENCIA[form.tipo].dica}
             </small>
           </div>
@@ -520,7 +529,9 @@ export default function JornadaPage() {
                           setForm({
                             ...form,
                             diaInteiro: true,
-                            descricao: form.descricao || (form.tipo === "ausencia" ? "Falta" : "Sem expediente"),
+                            descricao:
+                              form.descricao ||
+                              (form.tipo === "ausencia" ? "Falta" : form.tipo === "conserto" ? "" : "Sem expediente"),
                           })
                         }
                       >
@@ -537,10 +548,10 @@ export default function JornadaPage() {
             </small>
           </div>
           <label className="campo motivo">
-            <span>Motivo</span>
+            <span>{form.tipo === "conserto" ? "Oficina / OP" : "Motivo"}</span>
             <input
               className="entrada"
-              placeholder="Ex: falta de energia das 14h às 15h30"
+              placeholder={form.tipo === "conserto" ? "Ex: Oficina Silva, OP 1234" : "Ex: falta de energia das 14h às 15h30"}
               value={form.descricao}
               onChange={(e) => setForm({ ...form, descricao: e.target.value })}
             />

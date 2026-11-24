@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { buscarTodos, respostaErro } from "@/lib/producao-api";
 import { calcularPecas } from "@/lib/pecas";
-import { Costureira, Jornada, dataBrasilia, diasEntre, minutosJornada, tipoDaOcorrencia } from "@/lib/producao";
+import { Costureira, Jornada, dataBrasilia, diasEntre, minutosJornada, oficinaDoConserto, tipoDaOcorrencia } from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ type Dia = {
 //            ÷ minutos disponíveis (jornada do dia ± ocorrências)
 // Produtividade = minutos produzidos ÷ minutos previstos, que não descontam as ausências dela
 //            (ocorrências do tipo "Falta ou saída"). Paradas (falta de luz, máquina, reunião,
-//            sem expediente) e horas extras contam nas duas.
+//            sem expediente), consertos de oficina e horas extras contam nas duas.
 //
 // A jornada só conta nos dias em que a costureira estava no sistema: a partir do primeiro
 // apontamento da fábrica (antes disso o sistema não era usado) ou do cadastro dela, o que for
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     const [costureirasResp, jornadaResp, ocorrenciasResp, producao, primeiroResp, ultimoResp] = await Promise.all([
       supabase.from("costureiras").select("id, nome, setor, jornada, ativa, created_at").order("nome"),
       supabase.from("jornada_padrao").select("dia_semana, minutos"),
-      supabase.from("ocorrencias").select("costureira_id, data, minutos, tipo").gte("data", inicio).lte("data", fim),
+      supabase.from("ocorrencias").select("costureira_id, data, minutos, tipo, descricao").gte("data", inicio).lte("data", fim),
       buscarTodos((de, ate) =>
         supabase
           .from("ticket_operacoes")
@@ -71,7 +71,9 @@ export async function GET(req: NextRequest) {
     if (costureirasResp.error) throw costureirasResp.error;
     if (jornadaResp.error) throw jornadaResp.error;
     // banco ainda sem a coluna "tipo": busca sem ela (o tipo é deduzido)
-    let ocorrenciasLidas = ocorrenciasResp.data as { costureira_id: number | null; data: string; minutos: number; tipo?: string | null }[] | null;
+    let ocorrenciasLidas = ocorrenciasResp.data as
+      | { costureira_id: number | null; data: string; minutos: number; tipo?: string | null; descricao?: string | null }[]
+      | null;
     if (ocorrenciasResp.error?.code === "42703") {
       const r = await supabase.from("ocorrencias").select("costureira_id, data, minutos").gte("data", inicio).lte("data", fim);
       if (r.error) throw r.error;
@@ -166,6 +168,33 @@ export async function GET(req: NextRequest) {
         };
       });
 
+    // tempo gasto consertando serviço de oficinas externas (não pesa para a costureira)
+    const nomes = new Map(((costureirasResp.data ?? []) as Costureira[]).map((c) => [c.id, c.nome]));
+    const porOficina = new Map<string, { minutos: number; costureiras: Set<string> }>();
+    const porCostureiraConserto = new Map<string, number>();
+    let minutosConserto = 0;
+    for (const o of ocorrenciasLidas ?? []) {
+      if (tipoDaOcorrencia(o as Parameters<typeof tipoDaOcorrencia>[0]) !== "conserto") continue;
+      const min = Math.abs(o.minutos);
+      minutosConserto += min;
+      const oficina = oficinaDoConserto(o.descricao);
+      const atual = porOficina.get(oficina) ?? { minutos: 0, costureiras: new Set<string>() };
+      atual.minutos += min;
+      const nome = o.costureira_id ? nomes.get(o.costureira_id) : undefined;
+      if (nome) {
+        atual.costureiras.add(nome);
+        porCostureiraConserto.set(nome, (porCostureiraConserto.get(nome) ?? 0) + min);
+      }
+      porOficina.set(oficina, atual);
+    }
+    const consertos = {
+      minutos: minutosConserto,
+      porOficina: Array.from(porOficina, ([oficina, v]) => ({ oficina, minutos: v.minutos, costureiras: Array.from(v.costureiras).sort() })).sort(
+        (a, b) => b.minutos - a.minutos
+      ),
+      porCostureira: Array.from(porCostureiraConserto, ([nome, minutos]) => ({ nome, minutos })).sort((a, b) => b.minutos - a.minutos),
+    };
+
     // peças produzidas (equipe toda), só até o último dia apontado
     const pecas = await calcularPecas(
       supabase,
@@ -174,7 +203,7 @@ export async function GET(req: NextRequest) {
       fim < limite ? fim : limite
     );
 
-    return NextResponse.json({ costureiras: resultado, ultimoApontado, pecas });
+    return NextResponse.json({ costureiras: resultado, ultimoApontado, pecas, consertos });
   } catch (err) {
     return respostaErro(err);
   }
