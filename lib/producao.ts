@@ -36,6 +36,7 @@ export type Costureira = {
   setor: string | null;
   jornada: Jornada | null;
   ativa: boolean;
+  maquinas?: string[] | null; // máquinas em que ela trabalha (ausente enquanto a coluna não existir)
 };
 
 export type Operacao = {

@@ -4,15 +4,24 @@ import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
-import { Costureira, DIAS_SEMANA, Jornada, formatarMinutos } from "@/lib/producao";
+import { Costureira, DIAS_SEMANA, Jornada, Operacao, formatarMinutos } from "@/lib/producao";
 
-type Form = { id?: number; nome: string; setor: string; jornadaPropria: boolean; jornada: Jornada; ativa: boolean };
+type Form = {
+  id?: number;
+  nome: string;
+  setor: string;
+  jornadaPropria: boolean;
+  jornada: Jornada;
+  ativa: boolean;
+  maquinas: string[];
+};
 
 const totalSemana = (j: Jornada) => Object.values(j).reduce((s, v) => s + (Number(v) || 0), 0);
 
 export default function CostureirasPage() {
   const [costureiras, setCostureiras] = useState<Costureira[]>([]);
   const [padrao, setPadrao] = useState<Jornada>({});
+  const [maquinasCadastradas, setMaquinasCadastradas] = useState<string[]>([]);
   const [form, setForm] = useState<Form | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -20,12 +29,19 @@ export default function CostureirasPage() {
 
   async function carregar() {
     try {
-      const [c, j] = await Promise.all([
+      const [c, j, o] = await Promise.all([
         api<{ costureiras: Costureira[] }>("/api/costureiras"),
         api<{ jornada: Jornada }>("/api/jornada"),
+        api<{ operacoes: Operacao[] }>("/api/operacoes"),
       ]);
       setCostureiras(c.costureiras);
       setPadrao(j.jornada);
+      // as máquinas vêm do cadastro de operações
+      setMaquinasCadastradas(
+        Array.from(new Set(o.operacoes.map((op) => (op.maquina ?? "").trim()).filter(Boolean))).sort((a, b) =>
+          a.localeCompare(b, "pt-BR")
+        )
+      );
     } catch (e) {
       setErro(mensagemErro(e));
     }
@@ -35,7 +51,7 @@ export default function CostureirasPage() {
   }, []);
 
   function novo() {
-    setForm({ nome: "", setor: "", jornadaPropria: false, jornada: { ...padrao }, ativa: true });
+    setForm({ nome: "", setor: "", jornadaPropria: false, jornada: { ...padrao }, ativa: true, maquinas: [] });
   }
 
   function editar(c: Costureira) {
@@ -46,6 +62,7 @@ export default function CostureirasPage() {
       jornadaPropria: !!c.jornada,
       jornada: { ...(c.jornada ?? padrao) },
       ativa: c.ativa,
+      maquinas: [...(c.maquinas ?? [])],
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -64,6 +81,7 @@ export default function CostureirasPage() {
           setor: form.setor,
           ativa: form.ativa,
           jornada: form.jornadaPropria ? form.jornada : null,
+          maquinas: form.maquinas,
         }),
       });
       setForm(null);
@@ -91,6 +109,7 @@ export default function CostureirasPage() {
     [
       { id: "nome", titulo: "Nome", valor: (c) => c.nome },
       { id: "setor", titulo: "Setor", valor: (c) => c.setor },
+      { id: "maquinas", titulo: "Máquinas", valor: (c) => (c.maquinas ?? []).join(", ") },
       {
         id: "jornada",
         titulo: "Jornada semanal",
@@ -102,11 +121,15 @@ export default function CostureirasPage() {
     { id: "nome", direcao: "asc" }
   );
   const ativas = costureiras.filter((c) => c.ativa).length;
+  // máquinas do cadastro de operações e as que ela já tinha (mesmo que a operação tenha mudado)
+  const maquinasDoForm = form
+    ? Array.from(new Set([...maquinasCadastradas, ...form.maquinas])).sort((a, b) => a.localeCompare(b, "pt-BR"))
+    : [];
 
   return (
     <ProducaoLayout
       titulo="Costureiras"
-      subtitulo="Quem costura, em que setor e quantos minutos trabalha em cada dia."
+      subtitulo="Quem costura, em que setor e máquinas, e quantos minutos trabalha em cada dia."
       acoes={
         !form && (
           <button type="button" className="botao botao-primario" onClick={novo}>
@@ -148,6 +171,35 @@ export default function CostureirasPage() {
                 Ativa (aparece no apontamento)
               </label>
             </div>
+          </div>
+
+          <div className="campo" style={{ marginTop: 16 }}>
+            <span id="rotulo-maquinas">
+              Máquinas em que trabalha
+              {form.maquinas.length > 0 && <span className="fraco"> · {form.maquinas.length}</span>}
+            </span>
+            {maquinasDoForm.length === 0 ? (
+              <small>Nenhuma máquina cadastrada. As máquinas vêm do cadastro de Operações.</small>
+            ) : (
+              <div className="periodo-fichas maquinas-fichas" role="group" aria-labelledby="rotulo-maquinas">
+                {maquinasDoForm.map((m) => {
+                  const marcada = form.maquinas.includes(m);
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      className="ficha"
+                      aria-pressed={marcada}
+                      onClick={() =>
+                        setForm({ ...form, maquinas: marcada ? form.maquinas.filter((x) => x !== m) : [...form.maquinas, m] })
+                      }
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--regua)" }}>
@@ -219,6 +271,19 @@ export default function CostureirasPage() {
                       {c.nome} {!c.ativa && <span className="selo">inativa</span>}
                     </td>
                     <td>{c.setor ?? <span className="fraco">—</span>}</td>
+                    <td>
+                      {c.maquinas?.length ? (
+                        <div className="maquinas-selos">
+                          {c.maquinas.map((m) => (
+                            <span key={m} className="selo">
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="fraco">—</span>
+                      )}
+                    </td>
                     <td>
                       {formatarMinutos(totalSemana(c.jornada ?? padrao))}{" "}
                       <span className="fraco">{c.jornada ? "própria" : "padrão"}</span>

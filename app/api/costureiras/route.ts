@@ -2,16 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { respostaErro } from "@/lib/producao-api";
 
+const SQL_MAQUINAS = "alter table costureiras add column if not exists maquinas text[] not null default '{}';";
+const semColuna = (e: { code?: string } | null) => e?.code === "42703" || e?.code === "PGRST204";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("costureiras")
-      .select("id, nome, setor, jornada, ativa")
-      .order("nome");
+    const buscar = (campos: string) => supabase.from("costureiras").select(campos).order("nome");
+    let { data, error } = await buscar("id, nome, setor, jornada, ativa, maquinas");
+    // banco ainda sem a coluna "maquinas"
+    if (semColuna(error)) ({ data, error } = await buscar("id, nome, setor, jornada, ativa"));
     if (error) throw error;
     return NextResponse.json({ costureiras: data ?? [] });
   } catch (err) {
@@ -32,11 +35,23 @@ export async function POST(req: NextRequest) {
       jornada: body.jornada ?? null,
       ativa: body.ativa !== false,
     };
+    const maquinas: string[] = Array.isArray(body.maquinas)
+      ? Array.from(new Set<string>(body.maquinas.map((m: unknown) => String(m ?? "").trim()).filter(Boolean)))
+      : [];
 
     const supabase = getSupabaseServer();
-    const { error } = body.id
-      ? await supabase.from("costureiras").update(linha).eq("id", body.id)
-      : await supabase.from("costureiras").insert(linha);
+    const gravar = (dados: Record<string, unknown>) =>
+      body.id ? supabase.from("costureiras").update(dados).eq("id", body.id) : supabase.from("costureiras").insert(dados);
+    let { error } = await gravar({ ...linha, maquinas });
+    if (semColuna(error)) {
+      if (maquinas.length) {
+        return respostaErro(
+          new Error(`Para guardar as máquinas, falta preparar o banco. Rode no Supabase (SQL Editor): ${SQL_MAQUINAS}`),
+          400
+        );
+      }
+      ({ error } = await gravar(linha));
+    }
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (err) {

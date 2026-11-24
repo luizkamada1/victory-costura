@@ -3064,3 +3064,14 @@ input[type="number"]::-webkit-inner-spin-button {
     grid-row: 2;
   }
 }
+
+/* costureiras: máquinas em que trabalha */
+.maquinas-fichas {
+  flex-wrap: wrap;
+}
+
+.maquinas-selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

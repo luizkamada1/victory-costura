@@ -135,3 +135,6 @@ create table if not exists op_info (
   prazo date
 );
 alter table op_info enable row level security;
+
+-- Máquinas em que cada costureira trabalha (os nomes vêm do campo maquina das operações)
+alter table costureiras add column if not exists maquinas text[] not null default '{}';
