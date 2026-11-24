@@ -37,6 +37,13 @@ export async function POST(req: NextRequest) {
     if (body.id) {
       const { error } = await supabase.from("operacoes").update(linha).eq("id", body.id);
       if (error) throw error;
+      // os cupons guardam uma cópia da operação; a máquina acompanha a mudança (o tempo não,
+      // para não mexer na produção já apontada)
+      const { error: erroCupons } = await supabase
+        .from("ticket_operacoes")
+        .update({ maquina: linha.maquina })
+        .eq("operacao_id", body.id);
+      if (erroCupons) throw erroCupons;
       return NextResponse.json({ ok: true, id: Number(body.id) });
     }
     const { data, error } = await supabase.from("operacoes").insert(linha).select("id").single();
