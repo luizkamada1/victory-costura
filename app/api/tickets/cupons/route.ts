@@ -43,13 +43,27 @@ async function carregar(ticketId: number) {
   const fator = fatorGrade(item?.grades ?? [], ajustes);
   const partes = (ticket.partes ?? []) as Parte[];
   const ordemPorParte: Record<string, number> = {};
+  // a mesma operação pode estar mais de uma vez no item: a 1ª vez casa com o 1º cupom dela, a 2ª com o 2º...
+  const cuponsDaOperacao = new Map<number, { id: number; costureira_id: number | null; ordem: number }[]>();
+  for (const c of cupons ?? []) {
+    if (c.operacao_id === null) continue;
+    const lista = cuponsDaOperacao.get(c.operacao_id) ?? [];
+    lista.push(c);
+    cuponsDaOperacao.set(c.operacao_id, lista);
+  }
+  cuponsDaOperacao.forEach((lista) => lista.sort((a, b) => a.ordem - b.ordem || a.id - b.id));
+  const vezes = new Map<number, number>();
   const sequencia = (vinculos ?? [])
     .map((v) => v.operacoes as unknown as OperacaoCadastro | null)
     .filter((o): o is OperacaoCadastro => !!o && partes.includes(o.parte))
     .map((o) => {
       ordemPorParte[o.parte] = (ordemPorParte[o.parte] ?? 0) + 1;
-      const cupom = (cupons ?? []).find((c) => c.operacao_id === o.id);
+      const vez = (vezes.get(o.id) ?? 0) + 1;
+      vezes.set(o.id, vez);
+      const cupom = cuponsDaOperacao.get(o.id)?.[vez - 1];
       return {
+        chave: `${o.id}:${vez}`,
+        vez,
         operacao_id: o.id,
         nome: o.nome,
         maquina: o.maquina,
@@ -76,7 +90,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// body: { ticket_id, operacao_ids: [..], remover_outras? } → cria os cupons que o ticket ainda não tem e
+// body: { ticket_id, chaves: ["operacao:vez", ..] (ou operacao_ids: [..]), remover_outras? } → cria os cupons que o ticket ainda não tem e
 // devolve os ids de todos os cupons escolhidos (novos e já existentes), para imprimir.
 // remover_outras: tira do ticket os cupons das operações não escolhidas que ainda não foram apontados
 // (operações já feitas fora do sistema). Assim o ticket fica concluído quando as escolhidas forem apontadas.
@@ -84,13 +98,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const ticketId = Number(body.ticket_id);
+    const chaves: string[] = (Array.isArray(body.chaves) ? body.chaves : []).map(String);
     const escolhidas: number[] = (Array.isArray(body.operacao_ids) ? body.operacao_ids : []).map(Number);
     if (!ticketId) return respostaErro(new Error("Informe o número do ticket"), 400);
-    if (!escolhidas.length) return respostaErro(new Error("Escolha ao menos uma operação"), 400);
+    if (!chaves.length && !escolhidas.length) return respostaErro(new Error("Escolha ao menos uma operação"), 400);
 
     const r = await carregar(ticketId);
     if ("erro" in r) return respostaErro(new Error(r.erro), 404);
-    const linhas = r.sequencia.filter((o) => escolhidas.includes(o.operacao_id));
+    const linhas = r.sequencia.filter((o) => (chaves.length ? chaves.includes(o.chave) : escolhidas.includes(o.operacao_id)));
     const novas = linhas.filter((o) => !o.cupom_id);
 
     let criados: number[] = [];
@@ -133,24 +148,21 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// body: { ticket_id, operacao_ids: [..] } → dá essas operações como concluídas: os cupons delas ainda
+// body: { ticket_id, cupom_ids: [..] (ou operacao_ids: [..]) } → dá essas operações como concluídas: os cupons delas ainda
 // não apontados saem do ticket (foram feitas fora do sistema e não contam na eficiência de ninguém).
 // Cupons já apontados nunca saem.
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
     const ticketId = Number(body.ticket_id);
-    const operacoes: number[] = (Array.isArray(body.operacao_ids) ? body.operacao_ids : []).map(Number).filter((n: number) => n > 0);
+    const numeros = (v: unknown) => (Array.isArray(v) ? v : []).map(Number).filter((n: number) => n > 0);
+    const cupons: number[] = numeros(body.cupom_ids);
+    const operacoes: number[] = numeros(body.operacao_ids);
     if (!ticketId) return respostaErro(new Error("Informe o número do ticket"), 400);
-    if (!operacoes.length) return respostaErro(new Error("Escolha ao menos uma operação"), 400);
+    if (!cupons.length && !operacoes.length) return respostaErro(new Error("Escolha ao menos uma operação"), 400);
     const supabase = getSupabaseServer();
-    const { data, error } = await supabase
-      .from("ticket_operacoes")
-      .delete()
-      .eq("ticket_id", ticketId)
-      .in("operacao_id", operacoes)
-      .is("costureira_id", null)
-      .select("id");
+    const consulta = supabase.from("ticket_operacoes").delete().eq("ticket_id", ticketId).is("costureira_id", null);
+    const { data, error } = await (cupons.length ? consulta.in("id", cupons) : consulta.in("operacao_id", operacoes)).select("id");
     if (error) throw error;
     return NextResponse.json({ ok: true, concluidas: data?.length ?? 0 });
   } catch (err) {

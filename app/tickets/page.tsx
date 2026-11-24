@@ -752,6 +752,8 @@ function OperacoesDoTicket({
 }
 
 type OperacaoDoItem = {
+  chave: string; // "operacao:vez": a mesma operação pode estar mais de uma vez no item
+  vez: number;
   operacao_id: number;
   nome: string;
   maquina: string | null;
@@ -771,7 +773,7 @@ type DadosCupons = {
 function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; onFechar: () => void; onMudou: () => void }) {
   const janela = useRef<HTMLDialogElement>(null);
   const [dados, setDados] = useState<DadosCupons[] | null>(null);
-  const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
+  const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -793,7 +795,7 @@ function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; on
   const linhas: Linha[] = [];
   for (const d of dados ?? []) {
     for (const o of d.sequencia) {
-      const atual = linhas.find((l) => l.operacao_id === o.operacao_id);
+      const atual = linhas.find((l) => l.chave === o.chave);
       if (atual) {
         atual.tickets += 1;
         if (o.apontado) atual.apontados += 1;
@@ -803,7 +805,7 @@ function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; on
   }
   linhas.sort((a, b) => PARTES.indexOf(a.parte) - PARTES.indexOf(b.parte) || a.ordem - b.ordem);
 
-  function alternar(id: number) {
+  function alternar(id: string) {
     const n = new Set(marcadas);
     if (n.has(id)) n.delete(id);
     else n.add(id);
@@ -811,7 +813,7 @@ function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; on
   }
 
   // cupons marcados, por ticket
-  const marcadosPorTicket = (dados ?? []).map((d) => ({ d, ops: d.sequencia.filter((o) => marcadas.has(o.operacao_id)) }));
+  const marcadosPorTicket = (dados ?? []).map((d) => ({ d, ops: d.sequencia.filter((o) => marcadas.has(o.chave)) }));
   const totalImprimir = marcadosPorTicket.reduce((s, x) => s + x.ops.length, 0);
   // os que podem ser dados como concluídos: têm cupom e ainda não foram apontados
   const concluiveis = marcadosPorTicket.flatMap((x) => x.ops.filter((o) => o.cupom_id && !o.apontado));
@@ -828,7 +830,7 @@ function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; on
         if (!ops.length) continue;
         const r = await api<{ cupons: number[] }>("/api/tickets/cupons", {
           method: "POST",
-          body: JSON.stringify({ ticket_id: d.ticket.id, operacao_ids: ops.map((o) => o.operacao_id) }),
+          body: JSON.stringify({ ticket_id: d.ticket.id, chaves: ops.map((o) => o.chave) }),
         });
         cupons.push(...r.cupons);
         impressos.push(d.ticket.id);
@@ -863,11 +865,11 @@ function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; on
     try {
       let feitos = 0;
       for (const { d, ops } of marcadosPorTicket) {
-        const ids = ops.filter((o) => o.cupom_id && !o.apontado).map((o) => o.operacao_id);
+        const ids = ops.filter((o) => o.cupom_id && !o.apontado).map((o) => o.cupom_id as number);
         if (!ids.length) continue;
         const r = await api<{ concluidas: number }>("/api/tickets/cupons", {
           method: "PATCH",
-          body: JSON.stringify({ ticket_id: d.ticket.id, operacao_ids: ids }),
+          body: JSON.stringify({ ticket_id: d.ticket.id, cupom_ids: ids }),
         });
         feitos += r.concluidas;
       }
@@ -933,9 +935,9 @@ function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; on
                 {linhas.map((o) => {
                   const concluida = o.comCupom === 0 && o.apontados === 0;
                   return (
-                    <li key={o.operacao_id}>
-                      <label data-marcada={marcadas.has(o.operacao_id)}>
-                        <input type="checkbox" checked={marcadas.has(o.operacao_id)} onChange={() => alternar(o.operacao_id)} />
+                    <li key={o.chave}>
+                      <label data-marcada={marcadas.has(o.chave)}>
+                        <input type="checkbox" checked={marcadas.has(o.chave)} onChange={() => alternar(o.chave)} />
                         <span className={`selo selo-${o.parte}`}>{NOME_PARTE[o.parte].replace("Parte ", "")}</span>
                         <span className="forte num">{o.ordem}ª</span>
                         <span className="modal-lista-nome">{o.nome}</span>

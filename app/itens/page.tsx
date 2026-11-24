@@ -292,7 +292,8 @@ export default function ItensPage() {
           <div className="sequencias">
             {form.partes.map((parte) => {
               const seq = form.sequencia[parte];
-              const disponiveis = operacoes.filter((o) => o.parte === parte && !seq.includes(o.id));
+              // a mesma operação pode aparecer mais de uma vez na sequência (em momentos diferentes)
+              const disponiveis = operacoes.filter((o) => o.parte === parte);
               return (
                 <div key={parte} className="sequencia">
                   <div className="sequencia-cabecalho">
@@ -310,11 +311,20 @@ export default function ItensPage() {
                     <ol className="sequencia-lista">
                       {seq.map((id, i) => {
                         const op = porId.get(id);
+                        const vez = seq.slice(0, i + 1).filter((x) => x === id).length;
+                        const repetida = seq.filter((x) => x === id).length > 1;
                         return (
-                          <li key={id}>
+                          <li key={`${id}-${i}`}>
                             <span className="sequencia-ordem num">{i + 1}ª</span>
                             <span className="sequencia-nome">
-                              <strong>{op?.nome}</strong>
+                              <strong>
+                                {op?.nome}
+                                {repetida && (
+                                  <span className="selo" style={{ marginLeft: 6 }} title="Esta operação aparece mais de uma vez na sequência">
+                                    {vez}ª vez
+                                  </span>
+                                )}
+                              </strong>
                               <span className="fraco">{op?.maquina ?? "sem máquina"}</span>
                             </span>
                             <span className="num direita">{op ? min(op.tempo_minutos * fatorForm) : "—"}</span>
@@ -352,7 +362,7 @@ export default function ItensPage() {
                                 className="botao botao-pequeno botao-icone botao-perigo"
                                 aria-label="Tirar da sequência"
                                 title="Tirar da sequência"
-                                onClick={() => mudarSequencia(parte, seq.filter((x) => x !== id))}
+                                onClick={() => mudarSequencia(parte, seq.filter((_, j) => j !== i))}
                               >
                                 <X size={14} aria-hidden />
                               </button>
