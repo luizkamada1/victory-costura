@@ -457,8 +457,6 @@ export default function DashboardPage() {
             <GraficoCostureiras barras={visiveis.filter((l) => l.previsto > 0)} ordem={ordemBarras} carregando={carregando} />
           </section>
 
-          <MaquinasCostureiras linhas={visiveis} carregando={carregando} />
-
           <CapacidadeCostura inicio={inicio} fim={fim} pecasSaida={pecas?.total ?? 0} />
 
           {consertos && consertos.minutos > 0 && (
@@ -468,6 +466,8 @@ export default function DashboardPage() {
               carregando={carregando}
             />
           )}
+
+          <MaquinasCostureiras linhas={visiveis} carregando={carregando} />
 
           <FilaMaquinas />
         </div>
