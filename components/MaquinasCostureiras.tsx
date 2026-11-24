@@ -1,9 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { formatarMinutos } from "@/lib/producao";
+import { corEficiencia, formatarMinutos } from "@/lib/producao";
+import { pct } from "@/components/Medidas";
 
-type LinhaMaquinas = { id: number; nome: string; maquinas?: { maquina: string; minutos: number }[] };
+type LinhaMaquinas = {
+  id: number;
+  nome: string;
+  eficiencia: number | null;
+  maquinas?: { maquina: string; minutos: number }[];
+};
+type OrdemMaquinas = "maquina" | "eficiencia";
 
 // cores das máquinas, da mais usada pela equipe para a menos usada; o resto vira "Outras"
 const CORES = ["#c2416b", "#3b7dd8", "#2f9e6e", "#d99a2b", "#8a5cc7", "#4aa3b5"];
@@ -18,6 +25,7 @@ const pctTexto = (v: number) => `${Math.round(v * 100)}%`;
  */
 export default function MaquinasCostureiras({ linhas, carregando }: { linhas: LinhaMaquinas[]; carregando: boolean }) {
   const [foco, setFoco] = useState<string | null>(null);
+  const [ordem, setOrdem] = useState<OrdemMaquinas>("maquina");
 
   const totalEquipe = new Map<string, number>();
   for (const l of linhas) for (const m of l.maquinas ?? []) totalEquipe.set(m.maquina, (totalEquipe.get(m.maquina) ?? 0) + m.minutos);
@@ -44,7 +52,7 @@ export default function MaquinasCostureiras({ linhas, carregando }: { linhas: Li
         .map((m) => `${m.maquina}: ${pctTexto(total > 0 ? m.minutos / total : 0)} (${formatarMinutos(m.minutos)})`)
         .join("\n");
       const principal = partes.reduce<(typeof partes)[number] | null>((a, b) => (!a || b.parte > a.parte ? b : a), null);
-      return { id: l.id, nome: l.nome, total, partes, dica, principal };
+      return { id: l.id, nome: l.nome, eficiencia: l.eficiencia, total, partes, dica, principal };
     })
     .filter((b) => b.total > 0)
     .sort((a, b) => {
@@ -52,6 +60,8 @@ export default function MaquinasCostureiras({ linhas, carregando }: { linhas: Li
         const pa = a.partes.find((p) => p.maquina === foco)?.parte ?? 0;
         const pb = b.partes.find((p) => p.maquina === foco)?.parte ?? 0;
         if (pa !== pb) return pb - pa;
+      } else if (ordem === "eficiencia") {
+        if ((a.eficiencia ?? -1) !== (b.eficiencia ?? -1)) return (b.eficiencia ?? -1) - (a.eficiencia ?? -1);
       } else {
         // agrupa pela máquina principal (na ordem da legenda) e, dentro dela, de quem fica mais nela
         const ia = [...principais, OUTRAS].indexOf(a.principal?.maquina ?? OUTRAS);
@@ -66,8 +76,32 @@ export default function MaquinasCostureiras({ linhas, carregando }: { linhas: Li
 
   return (
     <section className="bloco" aria-busy={carregando} style={{ opacity: carregando ? 0.5 : 1 }}>
-      <div className="bloco-cabecalho" style={{ marginBottom: 8 }}>
+      <div className="bloco-cabecalho" style={{ alignItems: "flex-start", marginBottom: 8 }}>
         <h2>Máquinas por costureira</h2>
+        <div className="ordem-grafico">
+          Ordenar por
+          <div className="periodo-fichas" role="group" aria-label="Ordenar as costureiras por">
+            {(
+              [
+                ["maquina", "Máquina"],
+                ["eficiencia", "Eficiência"],
+              ] as [OrdemMaquinas, string][]
+            ).map(([id, rotulo]) => (
+              <button
+                key={id}
+                type="button"
+                className="ficha"
+                aria-pressed={!foco && ordem === id}
+                onClick={() => {
+                  setOrdem(id);
+                  setFoco(null);
+                }}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="legenda maq-legenda" role="group" aria-label="Ordenar pela máquina">
         {[...principais, ...(temOutras ? [OUTRAS] : [])].map((m) => (
@@ -87,6 +121,13 @@ export default function MaquinasCostureiras({ linhas, carregando }: { linhas: Li
         {barras.map((b) => (
           <div key={b.id} className="maq-linha" title={`${b.nome}\n${b.dica}`}>
             <span className="maq-nome">{b.nome}</span>
+            <span
+              className="maq-ef num"
+              title="Eficiência no período"
+              style={{ color: b.eficiencia === null ? "var(--tinta-3)" : corEficiencia(b.eficiencia) }}
+            >
+              {pct(b.eficiencia)}
+            </span>
             <div
               className="maq-barra"
               role="img"
