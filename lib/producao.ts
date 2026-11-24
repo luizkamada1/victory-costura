@@ -37,7 +37,11 @@ export type Costureira = {
   jornada: Jornada | null;
   ativa: boolean;
   maquinas?: string[] | null; // máquinas em que ela trabalha (ausente enquanto a coluna não existir)
+  // false = cadastro de apoio (teste, operação de botão): aponta cupons, mas fica fora dos indicadores
+  nos_indicadores?: boolean | null;
 };
+
+export const contaNosIndicadores = (c: Pick<Costureira, "nos_indicadores">) => c.nos_indicadores !== false;
 
 export type Operacao = {
   id: number;

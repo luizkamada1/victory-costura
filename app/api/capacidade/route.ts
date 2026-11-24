@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { buscarTodos, respostaErro } from "@/lib/producao-api";
-import { Costureira, Jornada, Parte, dataBrasilia, diasEntre } from "@/lib/producao";
+import { Costureira, Jornada, Parte, contaNosIndicadores, dataBrasilia, diasEntre } from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       buscarTodos<CupomLido>((de, ate) =>
         supabase.from("ticket_operacoes").select("ticket_id, minutos_total, costureira_id, data_producao").order("id").range(de, ate)
       ),
-      supabase.from("costureiras").select("jornada, ativa"),
+      supabase.from("costureiras").select("*"),
       supabase.from("jornada_padrao").select("dia_semana, minutos"),
     ]);
     if (costureirasResp.error) throw costureirasResp.error;
@@ -56,13 +56,15 @@ export async function GET(req: NextRequest) {
       const dias = Object.values(j).map(Number).filter((v) => v > 0);
       return dias.length ? dias.reduce((s, v) => s + v, 0) / dias.length : 0;
     };
-    const ativas = ((costureirasResp.data ?? []) as Pick<Costureira, "jornada" | "ativa">[]).filter((c) => c.ativa);
+    const ativas = ((costureirasResp.data ?? []) as Costureira[]).filter((c) => c.ativa && contaNosIndicadores(c));
+    const apoio = new Set(((costureirasResp.data ?? []) as Costureira[]).filter((c) => !contaNosIndicadores(c)).map((c) => c.id));
     const capacidadeDia = ativas.reduce((s, c) => s + mediaDia(c.jornada ?? padrao), 0);
 
     const hoje = dataBrasilia();
     // a saída só é conhecida até o último dia apontado (os apontamentos são feitos no dia seguinte)
     const ultimoApontado = cupons.reduce<string | null>(
-      (m, c) => (c.costureira_id !== null && c.data_producao && (!m || c.data_producao > m) ? c.data_producao : m),
+      (m, c) =>
+        c.costureira_id !== null && !apoio.has(c.costureira_id) && c.data_producao && (!m || c.data_producao > m) ? c.data_producao : m,
       null
     );
     const limite = [fim, hoje, ultimoApontado ?? hoje].sort()[0];

@@ -138,3 +138,6 @@ alter table op_info enable row level security;
 
 -- Máquinas em que cada costureira trabalha (os nomes vêm do campo maquina das operações)
 alter table costureiras add column if not exists maquinas text[] not null default '{}';
+
+-- Cadastros de apoio (teste, operação de botão): apontam cupons, mas ficam fora dos indicadores
+alter table costureiras add column if not exists nos_indicadores boolean not null default true;

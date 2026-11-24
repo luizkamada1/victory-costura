@@ -3,6 +3,7 @@ import { getSupabaseServer } from "@/lib/supabase";
 import { respostaErro } from "@/lib/producao-api";
 
 const SQL_MAQUINAS = "alter table costureiras add column if not exists maquinas text[] not null default '{}';";
+const SQL_INDICADORES = "alter table costureiras add column if not exists nos_indicadores boolean not null default true;";
 const semColuna = (e: { code?: string } | null) => e?.code === "42703" || e?.code === "PGRST204";
 
 export const runtime = "nodejs";
@@ -11,10 +12,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const supabase = getSupabaseServer();
-    const buscar = (campos: string) => supabase.from("costureiras").select(campos).order("nome");
-    let { data, error } = await buscar("id, nome, setor, jornada, ativa, maquinas");
-    // banco ainda sem a coluna "maquinas"
-    if (semColuna(error)) ({ data, error } = await buscar("id, nome, setor, jornada, ativa"));
+    // "*": as colunas novas (maquinas, nos_indicadores) vêm quando existirem no banco
+    const { data, error } = await supabase.from("costureiras").select("*").order("nome");
     if (error) throw error;
     return NextResponse.json({ costureiras: data ?? [] });
   } catch (err) {
@@ -42,15 +41,26 @@ export async function POST(req: NextRequest) {
     const supabase = getSupabaseServer();
     const gravar = (dados: Record<string, unknown>) =>
       body.id ? supabase.from("costureiras").update(dados).eq("id", body.id) : supabase.from("costureiras").insert(dados);
-    let { error } = await gravar({ ...linha, maquinas });
+    const nosIndicadores = body.nos_indicadores !== false;
+    let { error } = await gravar({ ...linha, maquinas, nos_indicadores: nosIndicadores });
     if (semColuna(error)) {
-      if (maquinas.length) {
+      // banco sem alguma das colunas novas: grava o que der; avisa se o que foi pedido não cabe
+      ({ error } = await gravar({ ...linha, maquinas }));
+      if (semColuna(error)) {
+        if (maquinas.length) {
+          return respostaErro(
+            new Error(`Para guardar as máquinas, falta preparar o banco. Rode no Supabase (SQL Editor): ${SQL_MAQUINAS}`),
+            400
+          );
+        }
+        ({ error } = await gravar(linha));
+      }
+      if (!error && !nosIndicadores) {
         return respostaErro(
-          new Error(`Para guardar as máquinas, falta preparar o banco. Rode no Supabase (SQL Editor): ${SQL_MAQUINAS}`),
+          new Error(`Para tirar dos indicadores, falta preparar o banco. Rode no Supabase (SQL Editor): ${SQL_INDICADORES}`),
           400
         );
       }
-      ({ error } = await gravar(linha));
     }
     if (error) throw error;
     return NextResponse.json({ ok: true });

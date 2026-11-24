@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import { useTabela } from "@/components/Tabela";
-import { Costureira, DIAS_SEMANA, Jornada, Operacao, formatarMinutos } from "@/lib/producao";
+import { Costureira, DIAS_SEMANA, Jornada, Operacao, contaNosIndicadores, formatarMinutos } from "@/lib/producao";
 
 type Form = {
   id?: number;
@@ -14,6 +14,7 @@ type Form = {
   jornada: Jornada;
   ativa: boolean;
   maquinas: string[];
+  nosIndicadores: boolean;
 };
 
 const totalSemana = (j: Jornada) => Object.values(j).reduce((s, v) => s + (Number(v) || 0), 0);
@@ -51,7 +52,7 @@ export default function CostureirasPage() {
   }, []);
 
   function novo() {
-    setForm({ nome: "", setor: "", jornadaPropria: false, jornada: { ...padrao }, ativa: true, maquinas: [] });
+    setForm({ nome: "", setor: "", jornadaPropria: false, jornada: { ...padrao }, ativa: true, maquinas: [], nosIndicadores: true });
   }
 
   function editar(c: Costureira) {
@@ -63,6 +64,7 @@ export default function CostureirasPage() {
       jornada: { ...(c.jornada ?? padrao) },
       ativa: c.ativa,
       maquinas: [...(c.maquinas ?? [])],
+      nosIndicadores: contaNosIndicadores(c),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -82,6 +84,7 @@ export default function CostureirasPage() {
           ativa: form.ativa,
           jornada: form.jornadaPropria ? form.jornada : null,
           maquinas: form.maquinas,
+          nos_indicadores: form.nosIndicadores,
         }),
       });
       setForm(null);
@@ -169,6 +172,14 @@ export default function CostureirasPage() {
               <label className="marcar" style={{ height: 38 }}>
                 <input type="checkbox" checked={form.ativa} onChange={(e) => setForm({ ...form, ativa: e.target.checked })} />
                 Ativa (aparece no apontamento)
+              </label>
+              <label className="marcar" title="Desmarque para cadastros de teste ou de apoio, como a operação de botão">
+                <input
+                  type="checkbox"
+                  checked={form.nosIndicadores}
+                  onChange={(e) => setForm({ ...form, nosIndicadores: e.target.checked })}
+                />
+                Conta nos indicadores (Dashboard)
               </label>
             </div>
           </div>
@@ -268,7 +279,12 @@ export default function CostureirasPage() {
                 {tabela.visiveis.map((c) => (
                   <tr key={c.id} style={{ opacity: c.ativa ? 1 : 0.55 }} data-selecionada={form?.id === c.id}>
                     <td className="forte">
-                      {c.nome} {!c.ativa && <span className="selo">inativa</span>}
+                      {c.nome} {!c.ativa && <span className="selo">inativa</span>}{" "}
+                      {!contaNosIndicadores(c) && (
+                        <span className="selo" title="Aponta cupons, mas fica fora da eficiência, da produção e do Dashboard">
+                          fora dos indicadores
+                        </span>
+                      )}
                     </td>
                     <td>{c.setor ?? <span className="fraco">—</span>}</td>
                     <td>

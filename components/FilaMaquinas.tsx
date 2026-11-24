@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { ChevronRight, Minus, Plus } from "lucide-react";
 import { api, mensagemErro } from "@/components/Layout";
 import type { EscopoFila, FilaMaquina, FilaRecorte } from "@/app/api/fila/route";
-import { Costureira, Jornada, formatarMinutos } from "@/lib/producao";
+import { Costureira, Jornada, contaNosIndicadores, formatarMinutos } from "@/lib/producao";
 
 const n1 = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
@@ -48,7 +48,7 @@ export default function FilaMaquinas() {
     // começa com as costureiras ativas e a jornada média de um dia de trabalho
     api<{ costureiras: Costureira[] }>("/api/costureiras")
       .then((r) => {
-        const ativas = r.costureiras.filter((c) => c.ativa).length;
+        const ativas = r.costureiras.filter((c) => c.ativa && contaNosIndicadores(c)).length;
         if (ativas > 0) setPessoas(ativas);
       })
       .catch(() => {});

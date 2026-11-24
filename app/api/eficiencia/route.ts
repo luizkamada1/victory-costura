@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { buscarTodos, respostaErro } from "@/lib/producao-api";
 import { calcularPecas } from "@/lib/pecas";
-import { Costureira, Jornada, dataBrasilia, diasEntre, minutosJornada, oficinaDoConserto, tipoDaOcorrencia } from "@/lib/producao";
+import {
+  Costureira,
+  Jornada,
+  contaNosIndicadores,
+  dataBrasilia,
+  diasEntre,
+  minutosJornada,
+  oficinaDoConserto,
+  tipoDaOcorrencia,
+} from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,8 +50,17 @@ export async function GET(req: NextRequest) {
     const dias = diasEntre(inicio, fim);
 
     const supabase = getSupabaseServer();
-    const [costureirasResp, jornadaResp, ocorrenciasResp, producao, primeiroResp, ultimoResp] = await Promise.all([
-      supabase.from("costureiras").select("id, nome, setor, jornada, ativa, created_at").order("nome"),
+    // cadastros de apoio (teste, operação de botão) ficam fora de todos os indicadores
+    const costureirasResp = await supabase.from("costureiras").select("*").order("nome");
+    if (costureirasResp.error) throw costureirasResp.error;
+    const foraDosIndicadores = ((costureirasResp.data ?? []) as Costureira[]).filter((c) => !contaNosIndicadores(c)).map((c) => c.id);
+    // primeiro e último dia apontado, sem contar os cadastros de apoio
+    const diasApontados = () => {
+      const q = supabase.from("ticket_operacoes").select("data_producao").not("data_producao", "is", null);
+      return foraDosIndicadores.length ? q.not("costureira_id", "in", `(${foraDosIndicadores.join(",")})`) : q;
+    };
+
+    const [jornadaResp, ocorrenciasResp, producaoToda, primeiroResp, ultimoResp] = await Promise.all([
       supabase.from("jornada_padrao").select("dia_semana, minutos"),
       supabase.from("ocorrencias").select("costureira_id, data, minutos, tipo, descricao").gte("data", inicio).lte("data", fim),
       buscarTodos((de, ate) =>
@@ -55,20 +73,15 @@ export async function GET(req: NextRequest) {
           .order("id")
           .range(de, ate)
       ),
-      supabase
-        .from("ticket_operacoes")
-        .select("data_producao")
-        .not("data_producao", "is", null)
+      diasApontados()
         .order("data_producao")
         .limit(1),
-      supabase
-        .from("ticket_operacoes")
-        .select("data_producao")
-        .not("data_producao", "is", null)
+      diasApontados()
         .order("data_producao", { ascending: false })
         .limit(1),
     ]);
-    if (costureirasResp.error) throw costureirasResp.error;
+    // a produção dos cadastros de apoio não conta para ninguém (só para fechar as peças, mais abaixo)
+    const producao = producaoToda.filter((p) => !foraDosIndicadores.includes(p.costureira_id));
     if (jornadaResp.error) throw jornadaResp.error;
     // banco ainda sem a coluna "tipo": busca sem ela (o tipo é deduzido)
     let ocorrenciasLidas = ocorrenciasResp.data as
@@ -129,7 +142,7 @@ export async function GET(req: NextRequest) {
     }
 
     const resultado = ((costureirasResp.data ?? []) as (Costureira & { created_at: string })[])
-      .filter((c) => c.ativa || comProducao.has(c.id))
+      .filter((c) => contaNosIndicadores(c) && (c.ativa || comProducao.has(c.id)))
       .map((c) => {
         // primeiro dia em que a jornada dela conta (sem nenhum apontamento na fábrica, nenhum dia conta)
         const cadastro = dataBrasilia(c.created_at);
@@ -187,6 +200,7 @@ export async function GET(req: NextRequest) {
     let minutosConserto = 0;
     for (const o of ocorrenciasLidas ?? []) {
       if (tipoDaOcorrencia(o as Parameters<typeof tipoDaOcorrencia>[0]) !== "conserto") continue;
+      if (o.costureira_id && foraDosIndicadores.includes(o.costureira_id)) continue;
       const min = Math.abs(o.minutos);
       minutosConserto += min;
       const oficina = oficinaDoConserto(o.descricao);
@@ -210,7 +224,8 @@ export async function GET(req: NextRequest) {
     // peças produzidas (equipe toda), só até o último dia apontado
     const pecas = await calcularPecas(
       supabase,
-      producao.map((p) => p.ticket_id),
+      // peça pronta depende de todos os cupons, inclusive os bipados pelos cadastros de apoio
+      producaoToda.map((p) => p.ticket_id),
       inicio,
       fim < limite ? fim : limite
     );
