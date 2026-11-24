@@ -12,6 +12,7 @@ import GraficoPecas from "@/components/GraficoPecas";
 import FilaMaquinas from "@/components/FilaMaquinas";
 import CapacidadeCostura from "@/components/CapacidadeCostura";
 import ConsertoOficinas, { ResumoConsertos } from "@/components/ConsertoOficinas";
+import MaquinasCostureiras from "@/components/MaquinasCostureiras";
 import type { ResumoPecas } from "@/lib/pecas";
 import { DIAS_SEMANA, corEficiencia, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
 
@@ -41,6 +42,7 @@ type Linha = {
   eficiencia: number | null;
   produtividade: number | null;
   dias: Dia[];
+  maquinas?: { maquina: string; minutos: number }[];
 };
 
 function somarDias(iso: string, dias: number) {
@@ -242,9 +244,19 @@ export default function DashboardPage() {
         "Produtividade (%)": emPct(razao(d.produzido, d.previsto)) ?? "",
       }))
     );
+    const folhaMaquinas = visiveis.flatMap((l) => {
+      const total = (l.maquinas ?? []).reduce((s, m) => s + m.minutos, 0);
+      return (l.maquinas ?? []).map((m) => ({
+        Costureira: l.nome,
+        Máquina: m.maquina,
+        "Minutos produzidos": Math.round(m.minutos * 10) / 10,
+        "Proporção (%)": total > 0 ? Math.round((m.minutos / total) * 1000) / 10 : "",
+      }));
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), "Resumo");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(diario), "Por dia");
+    if (folhaMaquinas.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(folhaMaquinas), "Máquinas");
     if (pecas?.porDia.length) {
       const folhaPecas = pecas.porDia.map((d) => ({
         Data: formatarData(d.data),
@@ -444,6 +456,8 @@ export default function DashboardPage() {
             </div>
             <GraficoCostureiras barras={visiveis.filter((l) => l.previsto > 0)} ordem={ordemBarras} carregando={carregando} />
           </section>
+
+          <MaquinasCostureiras linhas={visiveis} carregando={carregando} />
 
           <CapacidadeCostura inicio={inicio} fim={fim} pecasSaida={pecas?.total ?? 0} />
 

@@ -3075,3 +3075,72 @@ input[type="number"]::-webkit-inner-spin-button {
   flex-wrap: wrap;
   gap: 4px;
 }
+
+/* dashboard: proporção de máquinas de cada costureira */
+.maq-lista {
+  display: grid;
+  gap: 5px;
+}
+
+.maq-linha {
+  display: grid;
+  grid-template-columns: minmax(110px, 180px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.maq-nome {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maq-barra {
+  display: flex;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--superficie-2);
+}
+
+.maq-barra span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.6);
+}
+
+.maq-legenda {
+  margin-bottom: 10px;
+}
+
+.maq-legenda button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.maq-legenda button[aria-pressed="true"] {
+  color: var(--tinta);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .maq-linha {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

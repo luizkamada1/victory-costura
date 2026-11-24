@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       buscarTodos((de, ate) =>
         supabase
           .from("ticket_operacoes")
-          .select("ticket_id, costureira_id, data_producao, quantidade, minutos_total")
+          .select("ticket_id, costureira_id, data_producao, quantidade, minutos_total, maquina")
           .not("costureira_id", "is", null)
           .gte("data_producao", inicio)
           .lte("data_producao", fim)
@@ -119,6 +119,15 @@ export async function GET(req: NextRequest) {
     }
     const comProducao = new Set(producao.map((p) => p.costureira_id));
 
+    // minutos produzidos por costureira em cada máquina (para a proporção de máquinas)
+    const maquinasDela = new Map<number, Map<string, number>>();
+    for (const p of producao) {
+      const m = String(p.maquina ?? "").trim() || "Sem máquina";
+      const dela = maquinasDela.get(p.costureira_id) ?? new Map<string, number>();
+      dela.set(m, (dela.get(m) ?? 0) + Number(p.minutos_total));
+      maquinasDela.set(p.costureira_id, dela);
+    }
+
     const resultado = ((costureirasResp.data ?? []) as (Costureira & { created_at: string })[])
       .filter((c) => c.ativa || comProducao.has(c.id))
       .map((c) => {
@@ -165,6 +174,9 @@ export async function GET(req: NextRequest) {
           eficiencia: disponivel > 0 ? produzidoTotal / disponivel : null,
           produtividade: previsto > 0 ? produzidoTotal / previsto : null,
           dias: porDia.filter((d) => d.previsto > 0 || d.disponivel > 0 || d.produzido > 0 || d.ocorrencias !== 0),
+          maquinas: Array.from(maquinasDela.get(c.id) ?? [], ([maquina, minutos]) => ({ maquina, minutos })).sort(
+            (a, b) => b.minutos - a.minutos
+          ),
         };
       });
 
