@@ -1618,6 +1618,19 @@ input[type="checkbox"] {
   position: relative;
 }
 
+/* Dashboard: eficiência usada no cálculo da fila */
+.fila-eficiencia {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--tinta-2);
+}
+
+.fila-eficiencia .entrada-pequena {
+  width: 84px;
+}
+
 .entrada-sufixo .entrada {
   padding-right: 42px;
 }

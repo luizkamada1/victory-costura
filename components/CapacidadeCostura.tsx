@@ -23,6 +23,7 @@ type Resposta = {
 const n1 = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const dias = (v: number | null) => (v === null ? "—" : `${n1(v)} ${v >= 0.95 && v < 1.05 ? "dia" : "dias"}`);
+const CHAVE_EFICIENCIA = "fila-eficiencia";
 
 /**
  * A costura está dando conta? Compara o serviço que entrou (tickets gerados) com o que saiu
@@ -32,6 +33,27 @@ export default function CapacidadeCostura({ inicio, fim, pecasSaida }: { inicio:
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // eficiência da equipe usada para calcular a fila: 100% = no tempo padrão das operações
+  const [eficiencia, setEficiencia] = useState("100");
+
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem(CHAVE_EFICIENCIA);
+      if (salvo && Number(salvo) > 0) setEficiencia(salvo);
+    } catch {}
+  }, []);
+
+  function mudarEficiencia(v: string) {
+    setEficiencia(v);
+    try {
+      if (Number(v) > 0) localStorage.setItem(CHAVE_EFICIENCIA, v);
+    } catch {}
+  }
+
+  // a 80% de eficiência, 1 hora de tempo padrão leva 1h15 de verdade
+  const ef = Number(eficiencia.replace(",", ".")) > 0 ? Number(eficiencia.replace(",", ".")) : 100;
+  const fator = 100 / ef;
+  const ajustar = (v: number | null) => (v === null ? null : v * fator);
 
   useEffect(() => {
     if (!inicio || !fim) return;
@@ -48,6 +70,7 @@ export default function CapacidadeCostura({ inicio, fim, pecasSaida }: { inicio:
   const acumulou = (dados?.saldo ?? 0) > 0;
   const variacao =
     dados && dados.filaAgoraDias !== null && dados.filaInicioDias !== null ? dados.filaAgoraDias - dados.filaInicioDias : null;
+  const diasGrafico = (dados?.dias ?? []).map((d) => ({ ...d, fila: d.fila * fator, filaDias: ajustar(d.filaDias) }));
 
   return (
     <section className="bloco" aria-busy={carregando}>
@@ -61,6 +84,22 @@ export default function CapacidadeCostura({ inicio, fim, pecasSaida }: { inicio:
             </span>
           )}
         </div>
+        <label className="fila-eficiencia">
+          <span>Eficiência da equipe na fila</span>
+          <span className="entrada-sufixo">
+            <input
+              className="entrada entrada-pequena num"
+              type="number"
+              min={1}
+              max={200}
+              step={1}
+              value={eficiencia}
+              onChange={(e) => mudarEficiencia(e.target.value)}
+              aria-label="Eficiência da equipe usada para calcular a fila, em porcentagem"
+            />
+            <span>%</span>
+          </span>
+        </label>
       </div>
       {erro && <p className="fraco">{erro}</p>}
 
@@ -84,18 +123,22 @@ export default function CapacidadeCostura({ inicio, fim, pecasSaida }: { inicio:
         </div>
         <div>
           <span className="indicador-rotulo">Fila hoje</span>
-          <strong>{dados ? dias(dados.filaAgoraDias) : "—"}</strong>
+          <strong>{dados ? dias(ajustar(dados.filaAgoraDias)) : "—"}</strong>
           <span className="kpi-nota">
-            {dados ? `${formatarMinutos(dados.filaAgora)} de costura` : ""}
-            {variacao !== null && dados?.filaInicioDias !== null ? ` · era ${dias(dados!.filaInicioDias)}` : ""}
+            {dados ? `${formatarMinutos(dados.filaAgora * fator)} de costura` : ""}
+            {variacao !== null && dados?.filaInicioDias !== null ? ` · era ${dias(ajustar(dados!.filaInicioDias))}` : ""}
+            {ef !== 100 && dados ? ` · ${formatarMinutos(dados.filaAgora)} no tempo padrão` : ""}
           </span>
         </div>
       </div>
 
       <h3 className="detalhe-titulo" style={{ marginTop: 14 }}>
-        Fila ao fim de cada dia útil <span className="fraco" style={{ fontWeight: 400 }}>· em dias de trabalho</span>
+        Fila ao fim de cada dia útil{" "}
+        <span className="fraco" style={{ fontWeight: 400 }}>
+          · em dias de trabalho{ef !== 100 ? `, a ${ef.toLocaleString("pt-BR")}% de eficiência` : ""}
+        </span>
       </h3>
-      <GraficoFila dias={dados?.dias ?? []} carregando={carregando} />
+      <GraficoFila dias={diasGrafico} carregando={carregando} />
     </section>
   );
 }
