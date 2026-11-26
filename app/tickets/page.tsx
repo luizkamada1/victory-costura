@@ -670,7 +670,7 @@ export default function TicketsPage() {
                       </tr>
                       {estaAberto && (
                         <tr className="detalhe">
-                          <td colSpan={10} style={{ padding: "8px 20px 16px" }}>
+                          <td colSpan={11} style={{ padding: "8px 20px 16px" }}>
                             <OperacoesDoTicket operacoes={t.operacoes} nomeCostureira={nomeCostureira} />
                           </td>
                         </tr>
