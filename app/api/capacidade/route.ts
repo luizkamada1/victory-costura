@@ -102,17 +102,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // peças que entraram: tickets gerados no período; a parte de cima e a de baixo da mesma peça contam uma vez
-    const grupos = new Map<string, Partial<Record<Parte, number>>>();
+    // peças que entraram: tickets gerados no período; como na saída, cada parte (de cima, de baixo) conta como peça
+    let pecasEntrada = 0;
     for (const t of tickets) {
       const d = geradoEm.get(t.id)!;
       if (d < inicio || d > limite) continue;
-      const k = [t.op, t.referencia, t.cor ?? "", t.tamanho ?? ""].join("|");
-      const g = grupos.get(k) ?? {};
-      for (const p of t.partes ?? []) g[p] = (g[p] ?? 0) + t.quantidade;
-      grupos.set(k, g);
+      pecasEntrada += t.quantidade * (t.partes?.length ?? 0);
     }
-    const pecasEntrada = Array.from(grupos.values()).reduce((s, g) => s + Math.max(0, ...Object.values(g).map(Number)), 0);
 
     return NextResponse.json({
       dias,

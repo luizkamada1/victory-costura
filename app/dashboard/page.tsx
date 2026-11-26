@@ -260,7 +260,7 @@ export default function DashboardPage() {
     if (pecas?.porDia.length) {
       const folhaPecas = pecas.porDia.map((d) => ({
         Data: formatarData(d.data),
-        "Peças produzidas": d.pecas,
+        "Peças prontas": d.pecas,
         "Partes superiores prontas": d.superior,
         "Partes inferiores prontas": d.inferior,
       }));
@@ -366,7 +366,7 @@ export default function DashboardPage() {
             </section>
             <section className="bloco kpi">
               <div className="indicador">
-                <span className="indicador-rotulo">Peças produzidas</span>
+                <span className="indicador-rotulo">Peças prontas</span>
                 <div className="numero-heroi num">{(pecas?.total ?? 0).toLocaleString("pt-BR")}</div>
                 <span className="kpi-nota">equipe toda</span>
               </div>

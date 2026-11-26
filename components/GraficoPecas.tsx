@@ -120,12 +120,12 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
 
       {d && ativo !== null && (
         <div className="grafico-dica" style={{ left: dicaEsquerda, top: Math.max(0, y(d.pecas) - 96) }}>
-          <strong>{n(d.pecas)} peças</strong>
+          <strong>{n(d.pecas)} peças prontas</strong>
           <span>
             {diaMes(d.data)} · {DIAS_SEMANA[diaSemana(d.data)]}
           </span>
           <span>
-            Partes prontas: superior {n(d.superior)} · inferior {n(d.inferior)}
+            Parte superior {n(d.superior)} · inferior {n(d.inferior)}
           </span>
         </div>
       )}
