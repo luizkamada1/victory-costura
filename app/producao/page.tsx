@@ -128,7 +128,9 @@ export default function ProducaoPage() {
           const lista = ordenar(col.id, visiveis.filter((c) => c.situacao === col.id));
           const pecas = lista.reduce((s, c) => s + c.pecas, 0);
           const conjuntos = lista.reduce((s, c) => s + (c.conjuntos ?? c.pecas), 0);
-          const minutos = lista.reduce((s, c) => s + c.minutos, 0);
+          // em andamento conta só o que falta costurar (cupons ainda não apontados), como o "Fila hoje" do Dashboard
+          const faltaCosturar = col.id === "andamento";
+          const minutos = lista.reduce((s, c) => s + (faltaCosturar ? Math.max(0, c.minutos - c.minutosApontados) : c.minutos), 0);
           return (
             <section key={col.id} className="kanban-coluna" data-situacao={col.id} aria-label={col.titulo}>
               <header className="kanban-cabecalho">
@@ -142,6 +144,7 @@ export default function ProducaoPage() {
                   {pecas.toLocaleString("pt-BR")} <span className="fraco">peças</span>
                   <span className="kanban-conjuntos">
                     {conjuntos !== pecas && `${conjuntos.toLocaleString("pt-BR")} conj. · `}
+                    {faltaCosturar && "faltam "}
                     {formatarMinutos(minutos)}
                     {capacidadeDia > 0 && ` · ${(minutos / capacidadeDia).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ${
                       minutos / capacidadeDia >= 0.95 && minutos / capacidadeDia < 1.05 ? "dia" : "dias"
