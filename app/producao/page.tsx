@@ -125,6 +125,7 @@ export default function ProducaoPage() {
         {COLUNAS.map((col) => {
           const lista = ordenar(col.id, visiveis.filter((c) => c.situacao === col.id));
           const pecas = lista.reduce((s, c) => s + c.pecas, 0);
+          const conjuntos = lista.reduce((s, c) => s + (c.conjuntos ?? c.pecas), 0);
           return (
             <section key={col.id} className="kanban-coluna" data-situacao={col.id} aria-label={col.titulo}>
               <header className="kanban-cabecalho">
@@ -136,6 +137,7 @@ export default function ProducaoPage() {
                 </div>
                 <span className="kanban-pecas num">
                   {pecas.toLocaleString("pt-BR")} <span className="fraco">peças</span>
+                  {conjuntos !== pecas && <span className="kanban-conjuntos">{conjuntos.toLocaleString("pt-BR")} conj.</span>}
                 </span>
               </header>
               <div className="kanban-cartoes">
@@ -192,7 +194,8 @@ function CartaoKanban({
           OP {c.op}
         </button>
         <span className="num fraco kanban-medidas">
-          {c.pecas.toLocaleString("pt-BR")} pç · {formatarMinutos(c.minutos)}
+          {c.pecas.toLocaleString("pt-BR")} pç
+          {c.conjuntos && c.conjuntos !== c.pecas ? ` · ${c.conjuntos.toLocaleString("pt-BR")} conj.` : ""} · {formatarMinutos(c.minutos)}
         </span>
         <button
           type="button"
@@ -330,7 +333,8 @@ function DetalheOP({ cartao: c, onFechar }: { cartao: CartaoOP; onFechar: () => 
             <h2 className="num">OP {c.op}</h2>
             <p className="bloco-descricao">
               {c.referencias.join(", ")}
-              {c.nomes.length ? ` · ${c.nomes.join(", ")}` : ""} · {c.pecas.toLocaleString("pt-BR")} peças ·{" "}
+              {c.nomes.length ? ` · ${c.nomes.join(", ")}` : ""} · {c.pecas.toLocaleString("pt-BR")} peças
+              {c.conjuntos && c.conjuntos !== c.pecas ? ` (${c.conjuntos.toLocaleString("pt-BR")} conj.)` : ""} ·{" "}
               {pctTexto(progresso)} apontado ({formatarMinutos(c.minutosApontados)} de {formatarMinutos(c.minutos)})
             </p>
           </div>

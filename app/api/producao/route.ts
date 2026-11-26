@@ -43,7 +43,8 @@ export type CartaoOP = {
   nomes: string[];
   colecoes: string[];
   cores: string[];
-  pecas: number;
+  pecas: number; // cada parte conta como peça (como no Dashboard)
+  conjuntos: number; // pijamas: a maior quantidade entre as partes
   tickets: number;
   cupons: number;
   cuponsApontados: number;
@@ -107,6 +108,7 @@ export async function GET() {
           colecoes: [],
           cores: [],
           pecas: 0,
+          conjuntos: 0,
           tickets: 0,
           cupons: 0,
           cuponsApontados: 0,
@@ -166,7 +168,8 @@ export async function GET() {
     const limiteFinalizadas = new Date(Date.parse(hoje + "T00:00:00Z") - DIAS_FINALIZADAS * 86400000).toISOString().slice(0, 10);
     const cartoes: CartaoOP[] = [];
     for (const { _pecasParte, ...c } of Array.from(porOP.values())) {
-      c.pecas = Math.max(0, ...Object.values(_pecasParte));
+      c.pecas = Object.values(_pecasParte).reduce((s, v) => s + v, 0);
+      c.conjuntos = Math.max(0, ...Object.values(_pecasParte));
       c.situacao =
         c.cupons > 0 && c.cuponsApontados === c.cupons ? "finalizado" : c.cuponsApontados > 0 ? "andamento" : "aguardando";
       if (c.situacao === "finalizado" && c.ultimoApontamento && dataBrasilia(c.ultimoApontamento) < limiteFinalizadas) continue;
