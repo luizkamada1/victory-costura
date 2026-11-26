@@ -294,6 +294,7 @@ export default function TicketsPage() {
       { id: "referencia", titulo: "Ref.", valor: (t) => t.referencia },
       { id: "cor", titulo: "Cor", valor: (t) => t.cor },
       { id: "tamanho", titulo: "Tam.", valor: (t) => t.tamanho },
+      { id: "parte", titulo: "Parte", valor: (t) => abreviarPartes(t.partes) },
       { id: "quantidade", titulo: "Peças", alinhar: "right", valor: (t) => t.quantidade },
       {
         id: "apontadas",
@@ -604,6 +605,9 @@ export default function TicketsPage() {
                         <td className="num">{t.referencia}</td>
                         <td className="quebra">{t.cor ?? <span className="fraco">—</span>}</td>
                         <td>{t.tamanho ?? <span className="fraco">—</span>}</td>
+                        <td title={(t.partes ?? []).map((p) => (p === "superior" ? "Parte superior" : "Parte inferior")).join(" e ")}>
+                          {abreviarPartes(t.partes) || <span className="fraco">—</span>}
+                        </td>
                         <td className="direita">{t.quantidade}</td>
                         <td>
                           <div className="progresso">
@@ -706,6 +710,15 @@ function MarcarTodos({
       onChange={(e) => onChange(new Set(e.target.checked ? lista : []))}
     />
   );
+}
+
+// "Sup", "Inf" ou "Sup+Inf": curto para não alargar a tabela
+function abreviarPartes(partes: Parte[] | null | undefined) {
+  return (partes ?? [])
+    .slice()
+    .sort((x, y) => (x === y ? 0 : x === "superior" ? -1 : 1))
+    .map((p) => (p === "superior" ? "Sup" : "Inf"))
+    .join("+");
 }
 
 function OperacoesDoTicket({
