@@ -295,7 +295,7 @@ export default function TicketsPage() {
       { id: "cor", titulo: "Cor", valor: (t) => t.cor },
       { id: "tamanho", titulo: "Tam.", valor: (t) => t.tamanho },
       { id: "parte", titulo: "Parte", valor: (t) => abreviarPartes(t.partes) },
-      { id: "quantidade", titulo: "Peças", alinhar: "right", valor: (t) => t.quantidade },
+      { id: "quantidade", titulo: "Peças", alinhar: "right", valor: (t) => pecasDoTicket(t) },
       {
         id: "apontadas",
         titulo: "Cupons",
@@ -608,7 +608,14 @@ export default function TicketsPage() {
                         <td title={(t.partes ?? []).map((p) => (p === "superior" ? "Parte superior" : "Parte inferior")).join(" e ")}>
                           {abreviarPartes(t.partes) || <span className="fraco">—</span>}
                         </td>
-                        <td className="direita">{t.quantidade}</td>
+                        <td className="direita">
+                          {pecasDoTicket(t)}
+                          {(t.partes?.length ?? 0) > 1 && (
+                            <span className="pecas-conjuntos">
+                              {t.quantidade} conj. × {t.partes.length}
+                            </span>
+                          )}
+                        </td>
                         <td>
                           <div className="progresso">
                             <div className="barra">
@@ -712,6 +719,11 @@ function MarcarTodos({
   );
 }
 
+// peças como no Dashboard: cada parte conta como peça (21 conjuntos Sup+Inf = 42 peças)
+function pecasDoTicket(t: { quantidade: number; partes: Parte[] | null }) {
+  return t.quantidade * Math.max(1, t.partes?.length ?? 0);
+}
+
 // "Sup", "Inf" ou "Sup+Inf": curto para não alargar a tabela
 function abreviarPartes(partes: Parte[] | null | undefined) {
   return (partes ?? [])
@@ -776,7 +788,7 @@ type OperacaoDoItem = {
   apontado: boolean;
 };
 type DadosCupons = {
-  ticket: { id: number; op: string; referencia: string; cor: string | null; tamanho: string | null; quantidade: number };
+  ticket: { id: number; op: string; referencia: string; cor: string | null; tamanho: string | null; partes: Parte[] | null; quantidade: number };
   sequencia: OperacaoDoItem[];
 };
 
@@ -911,13 +923,14 @@ function ModalCupons({ ticketIds, onFechar, onMudou }: { ticketIds: number[]; on
             {dados && !varios && (
               <p className="bloco-descricao num">
                 OP {dados[0].ticket.op} · Ref {dados[0].ticket.referencia} · {dados[0].ticket.cor ?? "—"} · Tam{" "}
-                {dados[0].ticket.tamanho ?? "—"} · {dados[0].ticket.quantidade} peças
+                {dados[0].ticket.tamanho ?? "—"} · {pecasDoTicket(dados[0].ticket)} peças
+                {(dados[0].ticket.partes?.length ?? 0) > 1 && ` (${dados[0].ticket.quantidade} conj.)`}
               </p>
             )}
             {dados && varios && (
               <p className="bloco-descricao num">
                 {Array.from(new Set(dados.map((d) => `OP ${d.ticket.op}`))).join(", ")} ·{" "}
-                {dados.reduce((s, d) => s + d.ticket.quantidade, 0).toLocaleString("pt-BR")} peças
+                {dados.reduce((s, d) => s + pecasDoTicket(d.ticket), 0).toLocaleString("pt-BR")} peças
               </p>
             )}
           </div>
