@@ -2336,6 +2336,26 @@ input[type="number"]::-webkit-inner-spin-button {
   flex-shrink: 0;
 }
 
+/* Em andamento: escolha da ordem dos cartões */
+.kanban-ordem {
+  display: block;
+  margin-top: 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--tinta-3);
+  cursor: pointer;
+}
+
+.kanban-ordem:hover,
+.kanban-ordem:focus-visible {
+  background: var(--superficie);
+  color: var(--tinta);
+}
+
 .kanban-pecas {
   font-size: 13px;
   font-weight: 600;

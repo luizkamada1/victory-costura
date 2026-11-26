@@ -7,6 +7,9 @@ import ProducaoLayout, { Aviso, api, mensagemErro } from "@/components/Layout";
 import type { CartaoOP, Situacao } from "@/app/api/producao/route";
 import { Costureira, NOME_PARTE, PARTES, Ticket, dataBrasilia, formatarData, formatarMinutos } from "@/lib/producao";
 
+type OrdemAndamento = "prazo" | "progresso-desc" | "progresso-asc";
+const CHAVE_ORDEM_ANDAMENTO = "kanban-ordem-andamento";
+
 // Em andamento sem apontamento há mais dias que isso ganha o alerta de parada
 const DIAS_ALERTA = 3;
 
@@ -29,6 +32,20 @@ function quando(dataISO: string) {
 
 export default function ProducaoPage() {
   const [cartoes, setCartoes] = useState<CartaoOP[]>([]);
+  // ordem da coluna Em andamento: por prazo (padrão) ou pelo % de progresso
+  const [ordemAndamento, setOrdemAndamento] = useState<OrdemAndamento>("prazo");
+  useEffect(() => {
+    try {
+      const salva = localStorage.getItem(CHAVE_ORDEM_ANDAMENTO);
+      if (salva === "progresso-desc" || salva === "progresso-asc") setOrdemAndamento(salva);
+    } catch {}
+  }, []);
+  function mudarOrdemAndamento(v: OrdemAndamento) {
+    setOrdemAndamento(v);
+    try {
+      localStorage.setItem(CHAVE_ORDEM_ANDAMENTO, v);
+    } catch {}
+  }
   const [capacidadeDia, setCapacidadeDia] = useState(0); // minutos que a equipe costura num dia
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -81,8 +98,15 @@ export default function ProducaoPage() {
     }
   }
 
+  const progresso = (c: CartaoOP) => c.minutosApontados / (c.minutos || 1);
   const ordenar = (situacao: Situacao, lista: CartaoOP[]) =>
     [...lista].sort((a, b) => {
+      // em andamento, a ordem pode ser trocada para o % de progresso (o prazo desempata)
+      if (situacao === "andamento" && ordemAndamento !== "prazo") {
+        const dif = ordemAndamento === "progresso-asc" ? progresso(a) - progresso(b) : progresso(b) - progresso(a);
+        if (dif) return dif;
+        return (a.prazo ?? "9999").localeCompare(b.prazo ?? "9999");
+      }
       // urgentes primeiro nas colunas que ainda têm trabalho
       if (situacao !== "finalizado" && a.urgente !== b.urgente) return a.urgente ? -1 : 1;
       // depois, o prazo mais próximo primeiro; quem não tem prazo fica por último
@@ -93,7 +117,7 @@ export default function ProducaoPage() {
       }
       // aguardando: as mais antigas primeiro (fila); andamento: as mais adiantadas primeiro; finalizado: as mais recentes
       if (situacao === "aguardando") return a.geradoEm.localeCompare(b.geradoEm) || a.op.localeCompare(b.op, "pt-BR", { numeric: true });
-      if (situacao === "andamento") return b.minutosApontados / (b.minutos || 1) - a.minutosApontados / (a.minutos || 1);
+      if (situacao === "andamento") return progresso(b) - progresso(a);
       return (b.ultimoApontamento ?? "").localeCompare(a.ultimoApontamento ?? "");
     });
 
@@ -139,6 +163,18 @@ export default function ProducaoPage() {
                     {col.titulo}
                     <span className="contagem">{lista.length}</span>
                   </h2>
+                  {col.id === "andamento" && (
+                    <select
+                      className="kanban-ordem"
+                      aria-label="Ordenar Em andamento"
+                      value={ordemAndamento}
+                      onChange={(e) => mudarOrdemAndamento(e.target.value as OrdemAndamento)}
+                    >
+                      <option value="prazo">Ordem: prazo</option>
+                      <option value="progresso-desc">Progresso: maior primeiro</option>
+                      <option value="progresso-asc">Progresso: menor primeiro</option>
+                    </select>
+                  )}
                 </div>
                 <span className="kanban-pecas num">
                   {pecas.toLocaleString("pt-BR")} <span className="fraco">peças</span>
