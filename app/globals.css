@@ -1494,9 +1494,25 @@ input[type="checkbox"] {
   fill: #b3adb0;
 }
 
-.grafico-rotulo-conjuntos {
-  font-size: 10.5px;
-  fill: var(--tinta-3);
+/* Peças por dia: conjuntos prontos como linha por cima das barras */
+.linha-conjuntos {
+  fill: none;
+  stroke: var(--grafite);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.ponto-conjuntos {
+  fill: var(--grafite);
+  stroke: var(--superficie);
+  stroke-width: 1.5;
+}
+
+.legenda .legenda-linha-conjuntos {
+  width: 14px;
+  height: 0;
+  border-top: 2px solid var(--grafite);
+  border-radius: 0;
 }
 
 .grafico-rotulo-barra {

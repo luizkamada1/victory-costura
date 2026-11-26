@@ -427,6 +427,14 @@ export default function DashboardPage() {
                   </span>
                 )}
               </div>
+              <div className="legenda" style={{ marginBottom: 6 }}>
+                <span>
+                  <i className="barra-pecas" style={{ background: "var(--rosa-escuro)" }} /> Peças prontas
+                </span>
+                <span>
+                  <i className="legenda-linha-conjuntos" /> Conjuntos prontos
+                </span>
+              </div>
               <GraficoPecas dias={pecas?.porDia ?? []} carregando={carregando} />
             </section>
           </div>
