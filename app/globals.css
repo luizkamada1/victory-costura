@@ -1618,17 +1618,28 @@ input[type="checkbox"] {
   position: relative;
 }
 
-/* Dashboard: eficiência usada no cálculo da fila */
-.fila-eficiencia {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--tinta-2);
+/* Dashboard: eficiência usada no cálculo da fila, no canto do card "Fila hoje" */
+.capacidade-kpis > .fila-hoje {
+  position: relative;
 }
 
-.fila-eficiencia .entrada-pequena {
-  width: 84px;
+.fila-eficiencia {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+}
+
+.fila-eficiencia.entrada-sufixo .entrada {
+  width: 72px;
+  height: 30px;
+  padding: 0 26px 0 10px;
+  font-size: 13.5px;
+  text-align: right;
+}
+
+.fila-eficiencia.entrada-sufixo > span {
+  right: 10px;
+  font-size: 13px;
 }
 
 .entrada-sufixo .entrada {

@@ -84,22 +84,6 @@ export default function CapacidadeCostura({ inicio, fim, pecasSaida }: { inicio:
             </span>
           )}
         </div>
-        <label className="fila-eficiencia">
-          <span>Eficiência da equipe na fila</span>
-          <span className="entrada-sufixo">
-            <input
-              className="entrada entrada-pequena num"
-              type="number"
-              min={1}
-              max={200}
-              step={1}
-              value={eficiencia}
-              onChange={(e) => mudarEficiencia(e.target.value)}
-              aria-label="Eficiência da equipe usada para calcular a fila, em porcentagem"
-            />
-            <span>%</span>
-          </span>
-        </label>
       </div>
       {erro && <p className="fraco">{erro}</p>}
 
@@ -121,8 +105,22 @@ export default function CapacidadeCostura({ inicio, fim, pecasSaida }: { inicio:
           </strong>
           <span className="kpi-nota">{dados ? (acumulou ? "a fila cresceu" : dados.saldo < 0 ? "a fila diminuiu" : "fila igual") : ""}</span>
         </div>
-        <div>
+        <div className="fila-hoje">
           <span className="indicador-rotulo">Fila hoje</span>
+          <span className="entrada-sufixo fila-eficiencia" title="Eficiência da equipe usada no cálculo da fila">
+            <input
+              className="entrada num"
+              type="number"
+              min={1}
+              max={200}
+              step={1}
+              placeholder="100"
+              value={eficiencia}
+              onChange={(e) => mudarEficiencia(e.target.value)}
+              aria-label="Eficiência da equipe usada para calcular a fila, em porcentagem"
+            />
+            <span>%</span>
+          </span>
           <strong>{dados ? dias(ajustar(dados.filaAgoraDias)) : "—"}</strong>
           <span className="kpi-nota">
             {dados ? `${formatarMinutos(dados.filaAgora * fator)} de costura` : ""}
