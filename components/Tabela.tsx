@@ -39,10 +39,14 @@ function comparar(a: Valor, b: Valor) {
   return comparador.compare(String(a), String(b));
 }
 
+// opção do filtro que mostra só as linhas com a coluna sem preenchimento
+export const EM_BRANCO = "(Em branco)";
+
 // Em colunas numéricas aceita ">80", "<=50", "=10"; nas demais, busca o texto contido
 function passaNoFiltro(filtro: string, texto: string, valor: Valor) {
   const f = filtro.trim();
   if (!f) return true;
+  if (normalizar(f) === normalizar(EM_BRANCO)) return !texto.trim() || texto.trim() === "—";
   const op = f.match(/^(>=|<=|>|<|=)\s*(-?[\d.,]+)$/);
   if (op && typeof valor === "number") {
     const n = Number(op[2].replace(/\./g, "").replace(",", "."));
@@ -105,12 +109,16 @@ export function useTabela<T>(linhas: T[], colunas: Coluna<T>[], ordemInicial: Or
     for (const c of colunas) {
       if (c.filtravel === false || !(c.valor || c.texto)) continue;
       const distintos = new Set<string>();
+      let temBranco = false;
       for (const l of linhas) {
-        const t = textoDe(c, l);
-        if (t) distintos.add(t);
-        if (distintos.size > 60) break;
+        const t = textoDe(c, l).trim();
+        if (!t || t === "—") temBranco = true;
+        else if (distintos.size <= 60) distintos.add(t);
       }
-      if (distintos.size <= 60) mapa[c.id] = Array.from(distintos).sort(comparador.compare);
+      const lista = distintos.size <= 60 ? Array.from(distintos).sort(comparador.compare) : [];
+      // com algum campo vazio, a 1ª opção é "(Em branco)", mesmo quando há valores demais para listar
+      if (temBranco) lista.unshift(EM_BRANCO);
+      if (lista.length) mapa[c.id] = lista;
     }
     return mapa;
   }, [linhas, colunas, mostrarFiltros]);
