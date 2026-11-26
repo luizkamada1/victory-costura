@@ -2327,6 +2327,13 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .kanban-cabecalho h2 {
   font-size: 16px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap; /* o número de OPs fica sempre ao lado do título */
+}
+
+.kanban-cabecalho > div {
+  flex-shrink: 0;
 }
 
 .kanban-pecas {
@@ -2334,6 +2341,15 @@ input[type="number"]::-webkit-inner-spin-button {
   font-weight: 600;
   white-space: nowrap;
   text-align: right;
+  min-width: 0;
+}
+
+.kanban-pecas .kanban-conjuntos {
+  white-space: normal; /* se faltar espaço, "conj." fica numa linha e o tempo na outra */
+}
+
+.kanban-pecas .kanban-conjuntos > span {
+  white-space: nowrap;
 }
 
 .kanban-conjuntos {

@@ -143,12 +143,19 @@ export default function ProducaoPage() {
                 <span className="kanban-pecas num">
                   {pecas.toLocaleString("pt-BR")} <span className="fraco">peças</span>
                   <span className="kanban-conjuntos">
-                    {conjuntos !== pecas && `${conjuntos.toLocaleString("pt-BR")} conj. · `}
-                    {faltaCosturar && "faltam "}
-                    {formatarMinutos(minutos)}
-                    {capacidadeDia > 0 && ` · ${(minutos / capacidadeDia).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ${
-                      minutos / capacidadeDia >= 0.95 && minutos / capacidadeDia < 1.05 ? "dia" : "dias"
-                    }`}
+                    {conjuntos !== pecas && (
+                      <>
+                        <span>{conjuntos.toLocaleString("pt-BR")} conj.</span> ·{" "}
+                      </>
+                    )}
+                    <span>
+                      {faltaCosturar && "faltam "}
+                      {formatarMinutos(minutos)}
+                      {capacidadeDia > 0 &&
+                        ` · ${(minutos / capacidadeDia).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ${
+                          minutos / capacidadeDia >= 0.95 && minutos / capacidadeDia < 1.05 ? "dia" : "dias"
+                        }`}
+                    </span>
                   </span>
                 </span>
               </header>
