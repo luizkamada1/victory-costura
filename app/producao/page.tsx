@@ -126,6 +126,7 @@ export default function ProducaoPage() {
           const lista = ordenar(col.id, visiveis.filter((c) => c.situacao === col.id));
           const pecas = lista.reduce((s, c) => s + c.pecas, 0);
           const conjuntos = lista.reduce((s, c) => s + (c.conjuntos ?? c.pecas), 0);
+          const minutos = lista.reduce((s, c) => s + c.minutos, 0);
           return (
             <section key={col.id} className="kanban-coluna" data-situacao={col.id} aria-label={col.titulo}>
               <header className="kanban-cabecalho">
@@ -137,7 +138,10 @@ export default function ProducaoPage() {
                 </div>
                 <span className="kanban-pecas num">
                   {pecas.toLocaleString("pt-BR")} <span className="fraco">peças</span>
-                  {conjuntos !== pecas && <span className="kanban-conjuntos">{conjuntos.toLocaleString("pt-BR")} conj.</span>}
+                  <span className="kanban-conjuntos">
+                    {conjuntos !== pecas && `${conjuntos.toLocaleString("pt-BR")} conj. · `}
+                    {formatarMinutos(minutos)}
+                  </span>
                 </span>
               </header>
               <div className="kanban-cartoes">
