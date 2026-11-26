@@ -1494,6 +1494,11 @@ input[type="checkbox"] {
   fill: #b3adb0;
 }
 
+.grafico-rotulo-conjuntos {
+  font-size: 10.5px;
+  fill: var(--tinta-3);
+}
+
 .grafico-rotulo-barra {
   fill: var(--tinta);
   font-size: 11px;

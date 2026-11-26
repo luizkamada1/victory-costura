@@ -261,6 +261,7 @@ export default function DashboardPage() {
       const folhaPecas = pecas.porDia.map((d) => ({
         Data: formatarData(d.data),
         "Peças prontas": d.pecas,
+        "Conjuntos prontos": d.conjuntos ?? 0,
         "Partes superiores prontas": d.superior,
         "Partes inferiores prontas": d.inferior,
       }));
@@ -368,7 +369,7 @@ export default function DashboardPage() {
               <div className="indicador">
                 <span className="indicador-rotulo">Peças prontas</span>
                 <div className="numero-heroi num">{(pecas?.total ?? 0).toLocaleString("pt-BR")}</div>
-                <span className="kpi-nota">equipe toda</span>
+                <span className="kpi-nota">{(pecas?.totalConjuntos ?? 0).toLocaleString("pt-BR")} conjuntos · equipe toda</span>
               </div>
             </section>
             <section className="bloco kpi">

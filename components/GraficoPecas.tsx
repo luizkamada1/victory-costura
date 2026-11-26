@@ -5,7 +5,7 @@ import { DIAS_SEMANA, diaSemana } from "@/lib/producao";
 import type { PecasDia } from "@/lib/pecas";
 
 const ALTURA_UTIL = 132;
-const M = { topo: 22, direita: 56, baixo: 28, esquerda: 44 };
+const M = { topo: 34, direita: 56, baixo: 28, esquerda: 44 };
 const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const n = (v: number) => v.toLocaleString("pt-BR");
 
@@ -55,6 +55,8 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
   const media = dias.reduce((s, d) => s + d.pecas, 0) / dias.length;
   const passoDatas = Math.max(1, Math.ceil((dias.length * 46) / larguraUtil));
   const rotulos = faixa >= 30;
+  // conjuntos embaixo do número de peças, quando a barra é larga o bastante para o texto
+  const rotulosConjuntos = faixa >= 46;
 
   const d = ativo !== null ? dias[ativo] : null;
   const dicaEsquerda = ativo !== null ? Math.min(Math.max(centro(ativo) - 90, 0), largura - 180) : 0;
@@ -95,8 +97,18 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
                 />
               )}
               {rotulos && p.pecas > 0 && (
-                <text x={centro(i)} y={y(p.pecas) - 5} className="grafico-rotulo-barra" textAnchor="middle">
+                <text
+                  x={centro(i)}
+                  y={y(p.pecas) - (rotulosConjuntos ? 17 : 5)}
+                  className="grafico-rotulo-barra"
+                  textAnchor="middle"
+                >
                   {n(p.pecas)}
+                </text>
+              )}
+              {rotulosConjuntos && p.pecas > 0 && (
+                <text x={centro(i)} y={y(p.pecas) - 5} className="grafico-rotulo-conjuntos" textAnchor="middle">
+                  {n(p.conjuntos ?? 0)} conj.
                 </text>
               )}
               {(dias.length - 1 - i) % passoDatas === 0 && (
@@ -120,7 +132,9 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
 
       {d && ativo !== null && (
         <div className="grafico-dica" style={{ left: dicaEsquerda, top: Math.max(0, y(d.pecas) - 96) }}>
-          <strong>{n(d.pecas)} peças prontas</strong>
+          <strong>
+            {n(d.pecas)} peças · {n(d.conjuntos ?? 0)} conjuntos
+          </strong>
           <span>
             {diaMes(d.data)} · {DIAS_SEMANA[diaSemana(d.data)]}
           </span>
