@@ -421,6 +421,11 @@ export default function DashboardPage() {
             <section className="bloco" aria-busy={carregando}>
               <div className="bloco-cabecalho">
                 <h2>Peças por dia</h2>
+                {!!pecas?.total && (
+                  <span className="fraco num" style={{ fontSize: 13 }}>
+                    {pecas.total.toLocaleString("pt-BR")} peças · <strong style={{ color: "var(--tinta)" }}>{(pecas.totalConjuntos ?? 0).toLocaleString("pt-BR")} conjuntos</strong>
+                  </span>
+                )}
               </div>
               <GraficoPecas dias={pecas?.porDia ?? []} carregando={carregando} />
             </section>

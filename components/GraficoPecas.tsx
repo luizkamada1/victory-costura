@@ -5,7 +5,7 @@ import { DIAS_SEMANA, diaSemana } from "@/lib/producao";
 import type { PecasDia } from "@/lib/pecas";
 
 const ALTURA_UTIL = 132;
-const M = { topo: 34, direita: 56, baixo: 28, esquerda: 44 };
+const M0 = { topo: 34, direita: 56, baixo: 28, esquerda: 44 };
 const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const n = (v: number) => v.toLocaleString("pt-BR");
 
@@ -34,7 +34,7 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
   if (dias.length === 0) {
     return (
       <div ref={caixa} className="grafico">
-        <div className="vazio" style={{ height: ALTURA_UTIL + M.topo + M.baixo, display: "grid", placeContent: "center" }}>
+        <div className="vazio" style={{ height: ALTURA_UTIL + M0.topo + M0.baixo, display: "grid", placeContent: "center" }}>
           <strong>Nenhuma peça concluída neste período</strong>
           A peça conta quando todos os cupons dela são apontados.
         </div>
@@ -42,6 +42,10 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
     );
   }
 
+  // com barras estreitas (muitos dias), os valores ficam na vertical em cima da barra, para continuarem à mostra
+  const faixaPrevista = (largura - M0.esquerda - M0.direita) / dias.length;
+  const vertical = faixaPrevista < 46;
+  const M = vertical ? { ...M0, topo: 92 } : M0;
   const maior = Math.max(...dias.map((d) => d.pecas), 1);
   const passo = passoBonito(maior);
   const topo = Math.ceil(maior / passo) * passo;
@@ -54,9 +58,8 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
   const centro = (i: number) => M.esquerda + faixa * i + faixa / 2;
   const media = dias.reduce((s, d) => s + d.pecas, 0) / dias.length;
   const passoDatas = Math.max(1, Math.ceil((dias.length * 46) / larguraUtil));
-  const rotulos = faixa >= 30;
-  // conjuntos embaixo do número de peças, quando a barra é larga o bastante para o texto
-  const rotulosConjuntos = faixa >= 46;
+  const rotulos = !vertical;
+  const rotulosConjuntos = !vertical;
 
   const d = ativo !== null ? dias[ativo] : null;
   const dicaEsquerda = ativo !== null ? Math.min(Math.max(centro(ativo) - 90, 0), largura - 180) : 0;
@@ -109,6 +112,15 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
               {rotulosConjuntos && p.pecas > 0 && (
                 <text x={centro(i)} y={y(p.pecas) - 5} className="grafico-rotulo-conjuntos" textAnchor="middle">
                   {n(p.conjuntos ?? 0)} conj.
+                </text>
+              )}
+              {vertical && p.pecas > 0 && (
+                <text
+                  transform={`translate(${centro(i) + 3.5}, ${y(p.pecas) - 5}) rotate(-90)`}
+                  className="grafico-rotulo-conjuntos"
+                  textAnchor="start"
+                >
+                  <tspan className="grafico-rotulo-barra">{n(p.pecas)}</tspan> · {n(p.conjuntos ?? 0)} conj.
                 </text>
               )}
               {(dias.length - 1 - i) % passoDatas === 0 && (
