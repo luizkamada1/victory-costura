@@ -609,12 +609,8 @@ export default function TicketsPage() {
                           {abreviarPartes(t.partes) || <span className="fraco">—</span>}
                         </td>
                         <td className="direita">
-                          {pecasDoTicket(t)}
-                          {(t.partes?.length ?? 0) > 1 && (
-                            <span className="pecas-conjuntos">
-                              {t.quantidade} conj. × {t.partes.length}
-                            </span>
-                          )}
+                          {pecasDoTicket(t)} peças
+                          {(t.partes?.length ?? 0) > 1 && <span className="pecas-conjuntos">{t.quantidade} conj.</span>}
                         </td>
                         <td>
                           <div className="progresso">
