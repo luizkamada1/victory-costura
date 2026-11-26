@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { buscarTodos, respostaErro } from "@/lib/producao-api";
-import { Costureira, Jornada, Parte, capacidadeDiaria, contaNosIndicadores, dataBrasilia, diasEntre } from "@/lib/producao";
+import { Costureira, Jornada, Parte, capacidadeDiaria, contaNosIndicadores, dataBrasilia, diaSemana, diasEntre } from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +54,11 @@ export async function GET(req: NextRequest) {
     for (const r of jornadaResp.data ?? []) padrao[String(r.dia_semana)] = r.minutos;
     const apoio = new Set(((costureirasResp.data ?? []) as Costureira[]).filter((c) => !contaNosIndicadores(c)).map((c) => c.id));
     const capacidadeDia = capacidadeDiaria((costureirasResp.data ?? []) as Costureira[], padrao);
+    // dias da semana em que alguém da costura tem jornada (os outros, como sábado e domingo, ficam fora do gráfico)
+    const diasDeTrabalho = new Set<string>();
+    for (const c of ((costureirasResp.data ?? []) as Costureira[]).filter((c) => c.ativa && contaNosIndicadores(c))) {
+      for (const [dia, min] of Object.entries(c.jornada ?? padrao)) if (Number(min) > 0) diasDeTrabalho.add(dia);
+    }
 
     const hoje = dataBrasilia();
     // a saída só é conhecida até o último dia apontado (os apontamentos são feitos no dia seguinte)
@@ -93,7 +98,9 @@ export async function GET(req: NextRequest) {
         fila += entrada - saida;
         entrou += entrada;
         saiu += saida;
-        dias.push({ data, entrada, saida, fila: Math.max(0, fila), filaDias: emDias(Math.max(0, fila)) });
+        // só dias úteis no gráfico; um dia de folga em que houve movimento (ex.: sábado trabalhado) também aparece
+        const util = !diasDeTrabalho.size || diasDeTrabalho.has(String(diaSemana(data))) || entrada > 0 || saida > 0;
+        if (util) dias.push({ data, entrada, saida, fila: Math.max(0, fila), filaDias: emDias(Math.max(0, fila)) });
       }
     }
 

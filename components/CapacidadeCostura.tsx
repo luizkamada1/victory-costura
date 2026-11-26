@@ -26,7 +26,7 @@ const dias = (v: number | null) => (v === null ? "—" : `${n1(v)} ${v >= 0.95 &
 
 /**
  * A costura está dando conta? Compara o serviço que entrou (tickets gerados) com o que saiu
- * (cupons apontados) e mostra a fila, em dias de trabalho, ao fim de cada dia do período.
+ * (cupons apontados) e mostra a fila, em dias de trabalho, ao fim de cada dia útil do período.
  */
 export default function CapacidadeCostura({ inicio, fim, pecasSaida }: { inicio: string; fim: string; pecasSaida: number }) {
   const [dados, setDados] = useState<Resposta | null>(null);
@@ -93,7 +93,7 @@ export default function CapacidadeCostura({ inicio, fim, pecasSaida }: { inicio:
       </div>
 
       <h3 className="detalhe-titulo" style={{ marginTop: 14 }}>
-        Fila ao fim de cada dia <span className="fraco" style={{ fontWeight: 400 }}>· em dias de trabalho</span>
+        Fila ao fim de cada dia útil <span className="fraco" style={{ fontWeight: 400 }}>· em dias de trabalho</span>
       </h3>
       <GraficoFila dias={dados?.dias ?? []} carregando={carregando} />
     </section>
