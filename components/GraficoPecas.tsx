@@ -133,16 +133,14 @@ export default function GraficoPecas({ dias, carregando }: { dias: PecasDia[]; c
       </svg>
 
       {d && ativo !== null && (
-        <div className="grafico-dica" style={{ left: dicaEsquerda, top: Math.max(0, y(d.pecas) - 96) }}>
-          <strong>
-            {n(d.pecas)} peças · {n(d.conjuntos ?? 0)} conjuntos
-          </strong>
+        <div className="grafico-dica dica-pecas" style={{ left: dicaEsquerda, top: Math.max(0, y(d.pecas) - 120) }}>
+          <strong>{n(d.pecas)} peças</strong>
+          <strong>{n(d.conjuntos ?? 0)} conj.</strong>
           <span>
             {diaMes(d.data)} · {DIAS_SEMANA[diaSemana(d.data)]}
           </span>
-          <span>
-            Parte superior {n(d.superior)} · inferior {n(d.inferior)}
-          </span>
+          <span>{n(d.superior)} Sup</span>
+          <span>{n(d.inferior)} Inf</span>
         </div>
       )}
     </div>
