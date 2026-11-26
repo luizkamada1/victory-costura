@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { buscarTodos, respostaErro } from "@/lib/producao-api";
-import { Costureira, Jornada, Parte, contaNosIndicadores, dataBrasilia, diasEntre } from "@/lib/producao";
+import { Costureira, Jornada, Parte, capacidadeDiaria, contaNosIndicadores, dataBrasilia, diasEntre } from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,13 +52,8 @@ export async function GET(req: NextRequest) {
     // capacidade de um dia de trabalho
     const padrao: Jornada = {};
     for (const r of jornadaResp.data ?? []) padrao[String(r.dia_semana)] = r.minutos;
-    const mediaDia = (j: Jornada) => {
-      const dias = Object.values(j).map(Number).filter((v) => v > 0);
-      return dias.length ? dias.reduce((s, v) => s + v, 0) / dias.length : 0;
-    };
-    const ativas = ((costureirasResp.data ?? []) as Costureira[]).filter((c) => c.ativa && contaNosIndicadores(c));
     const apoio = new Set(((costureirasResp.data ?? []) as Costureira[]).filter((c) => !contaNosIndicadores(c)).map((c) => c.id));
-    const capacidadeDia = ativas.reduce((s, c) => s + mediaDia(c.jornada ?? padrao), 0);
+    const capacidadeDia = capacidadeDiaria((costureirasResp.data ?? []) as Costureira[], padrao);
 
     const hoje = dataBrasilia();
     // a saída só é conhecida até o último dia apontado (os apontamentos são feitos no dia seguinte)

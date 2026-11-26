@@ -179,6 +179,16 @@ export function formatarData(dataISO: string) {
   return `${d}/${m}/${a}`;
 }
 
+// Minutos de costura que a equipe faz num dia de trabalho: costureiras ativas (que contam nos
+// indicadores) × a jornada média de um dia em que elas trabalham
+export function capacidadeDiaria(costureiras: Costureira[], padrao: Jornada) {
+  const mediaDia = (j: Jornada) => {
+    const dias = Object.values(j).map(Number).filter((v) => v > 0);
+    return dias.length ? dias.reduce((s, v) => s + v, 0) / dias.length : 0;
+  };
+  return costureiras.filter((c) => c.ativa && contaNosIndicadores(c)).reduce((s, c) => s + mediaDia(c.jornada ?? padrao), 0);
+}
+
 export function formatarMinutos(min: number) {
   const sinal = min < 0 ? "-" : "";
   const abs = Math.abs(Math.round(min));

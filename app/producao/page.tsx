@@ -29,6 +29,7 @@ function quando(dataISO: string) {
 
 export default function ProducaoPage() {
   const [cartoes, setCartoes] = useState<CartaoOP[]>([]);
+  const [capacidadeDia, setCapacidadeDia] = useState(0); // minutos que a equipe costura num dia
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
@@ -37,8 +38,9 @@ export default function ProducaoPage() {
 
   async function carregar() {
     try {
-      const r = await api<{ cartoes: CartaoOP[] }>("/api/producao");
+      const r = await api<{ cartoes: CartaoOP[]; capacidadeDia?: number }>("/api/producao");
       setCartoes(r.cartoes);
+      setCapacidadeDia(r.capacidadeDia ?? 0);
       setErro(null);
     } catch (e) {
       setErro(mensagemErro(e));
@@ -141,6 +143,9 @@ export default function ProducaoPage() {
                   <span className="kanban-conjuntos">
                     {conjuntos !== pecas && `${conjuntos.toLocaleString("pt-BR")} conj. · `}
                     {formatarMinutos(minutos)}
+                    {capacidadeDia > 0 && ` · ${(minutos / capacidadeDia).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ${
+                      minutos / capacidadeDia >= 0.95 && minutos / capacidadeDia < 1.05 ? "dia" : "dias"
+                    }`}
                   </span>
                 </span>
               </header>

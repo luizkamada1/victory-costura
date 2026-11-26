@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase";
 import { buscarTodos, respostaErro } from "@/lib/producao-api";
-import { Parte, dataBrasilia } from "@/lib/producao";
+import { Costureira, Jornada, Parte, capacidadeDiaria, dataBrasilia } from "@/lib/producao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -175,7 +175,18 @@ export async function GET() {
       if (c.situacao === "finalizado" && c.ultimoApontamento && dataBrasilia(c.ultimoApontamento) < limiteFinalizadas) continue;
       cartoes.push(c);
     }
-    return NextResponse.json({ cartoes, diasFinalizadas: DIAS_FINALIZADAS });
+    // capacidade de um dia de trabalho, para converter o tempo das colunas em dias
+    let capacidadeDia = 0;
+    const [costureirasResp, jornadaResp] = await Promise.all([
+      supabase.from("costureiras").select("*"),
+      supabase.from("jornada_padrao").select("dia_semana, minutos"),
+    ]);
+    if (!costureirasResp.error && !jornadaResp.error) {
+      const padrao: Jornada = {};
+      for (const r of jornadaResp.data ?? []) padrao[String(r.dia_semana)] = r.minutos;
+      capacidadeDia = capacidadeDiaria((costureirasResp.data ?? []) as Costureira[], padrao);
+    }
+    return NextResponse.json({ cartoes, diasFinalizadas: DIAS_FINALIZADAS, capacidadeDia });
   } catch (err) {
     return respostaErro(err);
   }
