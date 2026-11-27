@@ -13,6 +13,7 @@ import FilaMaquinas from "@/components/FilaMaquinas";
 import CapacidadeCostura from "@/components/CapacidadeCostura";
 import ConsertoOficinas, { ResumoConsertos } from "@/components/ConsertoOficinas";
 import MaquinasCostureiras from "@/components/MaquinasCostureiras";
+import SeletorCostureiras from "@/components/SeletorCostureiras";
 import type { ResumoPecas } from "@/lib/pecas";
 import { DIAS_SEMANA, corEficiencia, diaSemana, formatarData, formatarMinutos, hojeISO } from "@/lib/producao";
 
@@ -115,8 +116,8 @@ export default function DashboardPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
   const [resumoAberto, setResumoAberto] = useState(false);
-  // costureira do gráfico por dia (null = equipe)
-  const [costureiraGrafico, setCostureiraGrafico] = useState<number | null>(null);
+  // costureiras do gráfico por dia (nenhuma = equipe)
+  const [costureirasGrafico, setCostureirasGrafico] = useState<number[]>([]);
   const [ordemBarras, setOrdemBarras] = useState<Ordem>("eficiencia");
 
   // lembra neste navegador se o resumo foi aberto
@@ -204,8 +205,10 @@ export default function DashboardPage() {
   const prodPeriodo = razao(totalProd, totalPrev);
 
   // Gráfico por dia: os dias apurados (com produção) do período, somando as costureiras visíveis na tabela
+  // costureiras marcadas no seletor: a linha soma só elas
+  const escolhidas = linhas.filter((l) => costureirasGrafico.includes(l.id));
   const porDia = new Map<string, PontoEficiencia & { previsto: number }>();
-  for (const l of visiveis) {
+  for (const l of escolhidas.length ? escolhidas : visiveis) {
     for (const d of l.dias) {
       const atual = porDia.get(d.data) ?? { data: d.data, produzido: 0, disponivel: 0, previsto: 0 };
       atual.produzido += d.produzido;
@@ -214,9 +217,9 @@ export default function DashboardPage() {
       porDia.set(d.data, atual);
     }
   }
-  const diasApurados = apurados(Array.from(porDia.values()));
-  const escolhida = linhas.find((l) => l.id === costureiraGrafico) ?? null;
-  const pontosGrafico = escolhida ? apurados(escolhida.dias) : diasApurados;
+  const pontosGrafico = apurados(Array.from(porDia.values()));
+  const nomeGrafico =
+    escolhidas.length === 1 ? escolhidas[0].nome : escolhidas.length > 1 ? `${escolhidas.length} costureiras` : undefined;
 
   async function exportar() {
     const XLSX = await import("xlsx");
@@ -399,23 +402,14 @@ export default function DashboardPage() {
                     </span>
                   </div>
                 </div>
-                <select
-                  className="entrada entrada-pequena"
-                  aria-label="Costureira do gráfico"
-                  value={escolhida ? String(escolhida.id) : ""}
-                  onChange={(e) => setCostureiraGrafico(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">{tabela.filtrando ? "Costureiras filtradas" : "Toda a equipe"}</option>
-                  {[...linhas]
-                    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
-                    .map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.nome}
-                      </option>
-                    ))}
-                </select>
+                <SeletorCostureiras
+                  opcoes={linhas}
+                  marcadas={costureirasGrafico}
+                  onChange={setCostureirasGrafico}
+                  rotuloTodas={tabela.filtrando ? "Costureiras filtradas" : "Toda a equipe"}
+                />
               </div>
-              <GraficoEficiencia pontos={pontosGrafico} carregando={carregando} nome={escolhida?.nome} />
+              <GraficoEficiencia pontos={pontosGrafico} carregando={carregando} nome={nomeGrafico} />
             </section>
 
             <section className="bloco" aria-busy={carregando}>
